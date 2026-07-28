@@ -1,0 +1,24 @@
+name: agenthub
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: ${AGENTHUB_POSTGRES_DB:-agenthub}
+      POSTGRES_USER: ${AGENTHUB_POSTGRES_USER:-agenthub}
+      POSTGRES_PASSWORD: ${AGENTHUB_POSTGRES_PASSWORD:-YOUR_DATABASE_PASSWORD_HERE}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - agenthub-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  agenthub-postgres-data:
+
