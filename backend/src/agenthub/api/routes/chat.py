@@ -85,6 +85,17 @@ async def get_conversation(
         _raise_http_error(error)
 
 
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    project_id: uuid.UUID, conversation_id: uuid.UUID, service: ChatServiceDependency
+) -> None:
+    """删除项目内历史会话，执行中的会话由服务层拒绝。"""
+    try:
+        await service.delete_conversation(project_id, conversation_id)
+    except (ChatNotFoundError, ChatConflictError) as error:
+        _raise_http_error(error)
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
 async def list_messages(
     project_id: uuid.UUID, conversation_id: uuid.UUID, service: ChatServiceDependency

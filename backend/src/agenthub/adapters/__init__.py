@@ -11,6 +11,7 @@ from agenthub.adapters.mock_adapter import (
     MockAdapterScript,
     MockScriptStep,
 )
+from agenthub.adapters.openai_compatible import OpenAICompatibleAdapter
 from agenthub.adapters.protocol import (
     AdapterErrorCode,
     AdapterHealth,
@@ -44,4 +45,6 @@ __all__ = [  # noqa: RUF022
     "MockScriptStep",
     # Codex CLI Adapter
     "CodexCLIAdapter",
+    # OpenAI 兼容 HTTP Adapter
+    "OpenAICompatibleAdapter",
 ]

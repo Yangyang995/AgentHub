@@ -12,6 +12,7 @@ class AgentType(enum.StrEnum):
 
     MOCK = "mock"
     CODEX_CLI = "codex_cli"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
 
 class AgentCapability(enum.StrEnum):

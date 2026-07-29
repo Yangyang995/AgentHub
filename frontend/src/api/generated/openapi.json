@@ -1,0 +1,1345 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgentHub API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "检查 API 进程是否存活",
+        "description": "只证明 FastAPI 事件循环可以响应，不探测外部依赖。",
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "检查 Phase 1 应用是否就绪",
+        "description": "确认类型化配置已加载。\n\n数据库和模型服务将在对应阶段接入；在此之前不得通过健康检查隐式连接它们。",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Create Conversation",
+        "description": "创建绑定一个已启用 Agent 的单聊会话。",
+        "operationId": "create_conversation_api_v1_projects__project_id__conversations_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "List Conversations",
+        "description": "列出项目中的会话。",
+        "operationId": "list_conversations_api_v1_projects__project_id__conversations_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationResponse"
+                  },
+                  "title": "Response List Conversations Api V1 Projects  Project Id  Conversations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Get Conversation",
+        "description": "读取项目内单个会话。",
+        "operationId": "get_conversation_api_v1_projects__project_id__conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Delete Conversation",
+        "description": "删除项目内历史会话，执行中的会话由服务层拒绝。",
+        "operationId": "delete_conversation_api_v1_projects__project_id__conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "List Messages",
+        "description": "按稳定顺序读取完整消息。",
+        "operationId": "list_messages_api_v1_projects__project_id__conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageResponse"
+                  },
+                  "title": "Response List Messages Api V1 Projects  Project Id  Conversations  Conversation Id  Messages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Submit Message",
+        "description": "原子保存消息和执行记录，然后在响应后独立消费 Adapter。",
+        "operationId": "submit_message_api_v1_projects__project_id__conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserMessageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmissionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/executions/{execution_id}/cancel": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Cancel Execution",
+        "description": "取消执行并返回已持久化的最终事件。",
+        "operationId": "cancel_execution_api_v1_projects__project_id__executions__execution_id__cancel_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Cancel Execution Api V1 Projects  Project Id  Executions  Execution Id  Cancel Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentExecutionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Message Id"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Agent Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExecutionStatus"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "message_id",
+          "agent_id",
+          "conversation_id",
+          "status",
+          "sequence",
+          "error_code",
+          "error_message",
+          "started_at",
+          "completed_at",
+          "created_at"
+        ],
+        "title": "AgentExecutionResponse",
+        "description": "执行记录响应。"
+      },
+      "AgentType": {
+        "type": "string",
+        "enum": [
+          "mock",
+          "codex_cli",
+          "openai_compatible"
+        ],
+        "title": "AgentType",
+        "description": "Agent 平台类型——决定调用哪个 Adapter。"
+      },
+      "ConversationCreate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "conversation_type": {
+            "$ref": "#/components/schemas/ConversationType",
+            "default": "direct"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Agent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "title": "ConversationCreate",
+        "description": "创建会话请求。"
+      },
+      "ConversationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "agent_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "conversation_type": {
+            "$ref": "#/components/schemas/ConversationType"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "agent_id",
+          "title",
+          "conversation_type",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationResponse",
+        "description": "会话响应。"
+      },
+      "ConversationType": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "group"
+        ],
+        "title": "ConversationType",
+        "description": "会话类型：一对一私聊或群聊。"
+      },
+      "ExecutionStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ExecutionStatus",
+        "description": "Agent 执行生命周期状态。"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LiveHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "alive",
+            "title": "Status",
+            "default": "alive"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service"
+        ],
+        "title": "LiveHealthResponse",
+        "description": "进程存活检查的稳定响应。"
+      },
+      "MessageResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "parent_message_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Message Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "conversation_id",
+          "project_id",
+          "parent_message_id",
+          "role",
+          "agent_id",
+          "content",
+          "content_type",
+          "sequence",
+          "created_at"
+        ],
+        "title": "MessageResponse",
+        "description": "消息响应。"
+      },
+      "MessageRole": {
+        "type": "string",
+        "enum": [
+          "user",
+          "agent",
+          "system"
+        ],
+        "title": "MessageRole",
+        "description": "消息发送者角色。"
+      },
+      "MessageSubmissionResponse": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/MessageResponse"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/AgentExecutionResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "execution"
+        ],
+        "title": "MessageSubmissionResponse",
+        "description": "原子创建的用户消息和待执行记录。"
+      },
+      "ReadyChecks": {
+        "properties": {
+          "configuration": {
+            "type": "string",
+            "const": "ok",
+            "title": "Configuration",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "title": "ReadyChecks",
+        "description": "就绪检查中各项依赖的状态。"
+      },
+      "ReadyHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ready",
+            "title": "Status",
+            "default": "ready"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/ReadyChecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service",
+          "checks"
+        ],
+        "title": "ReadyHealthResponse",
+        "description": "Phase 1 应用就绪检查的稳定响应。"
+      },
+      "UserMessageCreate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "content_type": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Content Type",
+            "default": "text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "UserMessageCreate",
+        "description": "单聊消息提交请求；角色和 Agent 由服务端依据会话确定。"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "EventEnvelope": {
+        "description": "持久化和 WebSocket 共用的事件信封。",
+        "properties": {
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "event_id",
+          "conversation_id",
+          "execution_id",
+          "sequence",
+          "type",
+          "timestamp",
+          "payload"
+        ],
+        "title": "EventEnvelope",
+        "type": "object"
+      },
+      "AdapterErrorCode": {
+        "description": "平台无关的稳定错误码。\n\nAdapter 实现必须将具体平台错误映射为这些标准码，\n不得将凭据、隐私路径或完整 stderr 附加到错误消息中。",
+        "enum": [
+          "ADAPTER_TIMEOUT",
+          "ADAPTER_CANCELLED",
+          "ADAPTER_INTERNAL_ERROR",
+          "ADAPTER_CONFIG_ERROR",
+          "ADAPTER_UNAVAILABLE",
+          "ADAPTER_INVALID_RESPONSE",
+          "ADAPTER_EXECUTION_FAILED",
+          "ADAPTER_PATH_REJECTED",
+          "ADAPTER_PERMISSION_DENIED",
+          "ADAPTER_UNKNOWN"
+        ],
+        "title": "AdapterErrorCode",
+        "type": "string"
+      },
+      "ArtifactCreatedEvent": {
+        "description": "产出物创建事件——Agent 产生了文件、Diff 或报告。",
+        "properties": {
+          "event_id": {
+            "description": "事件唯一 ID",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "description": "所属执行 ID",
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "同一执行中的单调递增序号",
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "timestamp": {
+            "description": "事件发生时间（UTC）",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "artifact.created",
+            "default": "artifact.created",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "artifact_id": {
+            "description": "产出物 ID",
+            "format": "uuid",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "artifact_type": {
+            "description": "产出物类型：file / diff / preview / report",
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "relative_path": {
+            "description": "相对于工作目录的路径",
+            "title": "Relative Path",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "内容哈希（SHA-256）",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "size": {
+            "description": "文件大小（字节）",
+            "minimum": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "description": "扩展元数据",
+            "title": "Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "execution_id",
+          "sequence",
+          "artifact_id",
+          "artifact_type",
+          "relative_path",
+          "content_hash",
+          "size"
+        ],
+        "title": "ArtifactCreatedEvent",
+        "type": "object"
+      },
+      "ContentDeltaEvent": {
+        "description": "内容增量事件——流式输出中的一段文本。",
+        "properties": {
+          "event_id": {
+            "description": "事件唯一 ID",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "description": "所属执行 ID",
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "同一执行中的单调递增序号",
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "timestamp": {
+            "description": "事件发生时间（UTC）",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "content.delta",
+            "default": "content.delta",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "delta": {
+            "description": "增量文本片段",
+            "title": "Delta",
+            "type": "string"
+          },
+          "content_type": {
+            "default": "text",
+            "description": "内容类型：text / markdown / code",
+            "title": "Content Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "execution_id",
+          "sequence",
+          "delta"
+        ],
+        "title": "ContentDeltaEvent",
+        "type": "object"
+      },
+      "ExecutionErrorEvent": {
+        "description": "结构化错误事件——包含稳定错误码和安全消息。",
+        "properties": {
+          "event_id": {
+            "description": "事件唯一 ID",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "description": "所属执行 ID",
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "同一执行中的单调递增序号",
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "timestamp": {
+            "description": "事件发生时间（UTC）",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.error",
+            "default": "execution.error",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "error_code": {
+            "$ref": "#/components/schemas/AdapterErrorCode",
+            "description": "稳定错误码"
+          },
+          "error_message": {
+            "description": "安全脱敏后的错误描述",
+            "title": "Error Message",
+            "type": "string"
+          },
+          "recoverable": {
+            "default": false,
+            "description": "是否为可恢复错误",
+            "title": "Recoverable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "execution_id",
+          "sequence",
+          "error_code",
+          "error_message"
+        ],
+        "title": "ExecutionErrorEvent",
+        "type": "object"
+      },
+      "ExecutionStatusEvent": {
+        "description": "执行状态变更事件——running / succeeded / failed / cancelled。",
+        "properties": {
+          "event_id": {
+            "description": "事件唯一 ID",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "description": "所属执行 ID",
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "同一执行中的单调递增序号",
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "timestamp": {
+            "description": "事件发生时间（UTC）",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.status",
+            "default": "execution.status",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "status": {
+            "description": "执行状态",
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "状态附加说明（已脱敏）",
+            "title": "Message"
+          }
+        },
+        "required": [
+          "execution_id",
+          "sequence",
+          "status"
+        ],
+        "title": "ExecutionStatusEvent",
+        "type": "object"
+      },
+      "ExecutionUsageEvent": {
+        "description": "用量事件——Token 消耗、调用次数、耗时。",
+        "properties": {
+          "event_id": {
+            "description": "事件唯一 ID",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "description": "所属执行 ID",
+            "format": "uuid",
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "同一执行中的单调递增序号",
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "timestamp": {
+            "description": "事件发生时间（UTC）",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.usage",
+            "default": "execution.usage",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "token_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Token 消耗量（不可用时为 None，不用 0 代替）",
+            "title": "Token Count"
+          },
+          "call_count": {
+            "default": 1,
+            "description": "API 调用次数",
+            "minimum": 0,
+            "title": "Call Count",
+            "type": "integer"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "当前已耗时（毫秒）",
+            "title": "Duration Ms"
+          }
+        },
+        "required": [
+          "execution_id",
+          "sequence"
+        ],
+        "title": "ExecutionUsageEvent",
+        "type": "object"
+      },
+      "AgentEvent": {
+        "discriminator": {
+          "mapping": {
+            "artifact.created": "#/components/schemas/ArtifactCreatedEvent",
+            "content.delta": "#/components/schemas/ContentDeltaEvent",
+            "execution.error": "#/components/schemas/ExecutionErrorEvent",
+            "execution.status": "#/components/schemas/ExecutionStatusEvent",
+            "execution.usage": "#/components/schemas/ExecutionUsageEvent"
+          },
+          "propertyName": "event_type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ContentDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ExecutionStatusEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ExecutionErrorEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ExecutionUsageEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ArtifactCreatedEvent"
+          }
+        ]
+      }
+    }
+  }
+}

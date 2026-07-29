@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agenthub.adapters.protocol import (
@@ -68,6 +68,23 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def _conversation_title(content: str) -> str:
+    """将首条问题压缩为稳定短标题，避免新建会话时额外调用模型。"""
+    title = " ".join(content.split()).strip().strip("#*`> ")
+    return title[:36] if title else "新对话"
+
+
+def _conversation_response(conversation: Conversation, agent: Agent | None) -> ConversationResponse:
+    """组合会话与 Agent 展示字段，避免路由层接触 ORM 关系。"""
+    response = ConversationResponse.model_validate(conversation)
+    return response.model_copy(
+        update={
+            "agent_name": agent.name if agent is not None else None,
+            "agent_type": agent.agent_type if agent is not None else None,
+        }
+    )
+
+
 class ChatService:
     """协调单聊持久化与执行；每个公开写方法明确提交事务。"""
 
@@ -99,24 +116,25 @@ class ChatService:
             conversation = Conversation(
                 project_id=project_id,
                 agent_id=agent.id,
-                title=data.title,
+                title="新对话",
                 conversation_type=ConversationType.DIRECT,
             )
             session.add(conversation)
             await session.flush()
-            return ConversationResponse.model_validate(conversation)
+            return _conversation_response(conversation, agent)
 
     async def list_conversations(self, project_id: uuid.UUID) -> list[ConversationResponse]:
         """只返回指定项目中的单聊会话。"""
         async with self._sessions() as session:
             if await session.get(Project, project_id) is None:
                 raise ChatNotFoundError
-            result = await session.scalars(
-                select(Conversation)
+            result = await session.execute(
+                select(Conversation, Agent)
+                .join(Agent, Agent.id == Conversation.agent_id, isouter=True)
                 .where(Conversation.project_id == project_id)
                 .order_by(Conversation.updated_at.desc())
             )
-            return [ConversationResponse.model_validate(item) for item in result]
+            return [_conversation_response(item, agent) for item, agent in result]
 
     async def get_conversation(
         self, project_id: uuid.UUID, conversation_id: uuid.UUID
@@ -124,7 +142,26 @@ class ChatService:
         """按项目边界读取会话，不泄露跨项目资源是否存在。"""
         async with self._sessions() as session:
             conversation = await self._get_conversation(session, project_id, conversation_id)
-            return ConversationResponse.model_validate(conversation)
+            agent = (
+                await session.get(Agent, conversation.agent_id) if conversation.agent_id else None
+            )
+            return _conversation_response(conversation, agent)
+
+    async def delete_conversation(self, project_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+        """删除项目内历史会话；执行中会话必须先取消，避免删除流式执行上下文。"""
+        async with self._sessions() as session, session.begin():
+            conversation = await self._get_conversation(session, project_id, conversation_id)
+            active = await session.scalar(
+                select(func.count())
+                .select_from(AgentExecution)
+                .where(
+                    AgentExecution.conversation_id == conversation.id,
+                    AgentExecution.status.in_(("pending", "running")),
+                )
+            )
+            if active:
+                raise ChatConflictError("会话仍在执行，请先取消执行")
+            await session.execute(delete(Conversation).where(Conversation.id == conversation.id))
 
     async def list_messages(
         self, project_id: uuid.UUID, conversation_id: uuid.UUID
@@ -157,6 +194,9 @@ class ChatService:
                 raise ChatNotFoundError
             if agent.status != AgentStatus.ENABLED:
                 raise ChatConflictError("Agent 未启用")
+            if conversation.title in (None, "", "新对话"):
+                conversation.title = _conversation_title(data.content)
+            conversation.updated_at = _utcnow()
             sequence = await self._next_message_sequence(session, conversation_id)
             message = Message(
                 project_id=project_id,
@@ -198,18 +238,37 @@ class ChatService:
         if record is None:
             return
         execution, agent, message, project = record
-        adapter = self._resolve_adapter(agent)
-        self._running_adapters[execution_id] = adapter
-        task = AgentTask(
-            execution_id=execution.id,
-            project_id=execution.project_id,
-            agent_id=execution.agent_id,
-            conversation_id=execution.conversation_id,
-            message_content=message.content,
-            working_dir=Path(project.root_path),
-        )
-        content: list[str] = []
         try:
+            adapter = self._resolve_adapter(agent)
+            self._running_adapters[execution_id] = adapter
+            async with self._sessions() as session:
+                message_rows = await session.scalars(
+                    select(Message)
+                    .where(Message.conversation_id == execution.conversation_id)
+                    .order_by(Message.sequence)
+                )
+                # SQLAlchemy 的 VARCHAR 枚举字段可能返回 str；统一为平台协议使用的角色文本。
+                history = [
+                    {
+                        "role": (
+                            "assistant"
+                            if str(item.role) == MessageRole.AGENT.value
+                            else str(item.role)
+                        ),
+                        "content": item.content,
+                    }
+                    for item in message_rows
+                ]
+            task = AgentTask(
+                execution_id=execution.id,
+                project_id=execution.project_id,
+                agent_id=execution.agent_id,
+                conversation_id=execution.conversation_id,
+                message_content=message.content,
+                working_dir=Path(project.root_path),
+                context={"messages": history},
+            )
+            content: list[str] = []
             async for event in adapter.run(task):
                 completed_content = None
                 if isinstance(event, ExecutionStatusEvent) and event.status == "succeeded":

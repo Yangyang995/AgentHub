@@ -135,6 +135,8 @@ class ConversationResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     agent_id: uuid.UUID | None
+    agent_name: str | None = None
+    agent_type: AgentType | None = None
     title: str | None
     conversation_type: ConversationType
     created_at: datetime

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from agenthub.adapters import MockAdapter, MockAdapterScript
+from agenthub.adapters import MockAdapter, MockAdapterScript, OpenAICompatibleAdapter
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.chat import websocket_router
 from agenthub.api.routes.health import router as health_router
@@ -23,11 +23,22 @@ from agenthub.services.chat import AgentAdapter, ChatService
 from agenthub.services.realtime import ConversationEventBroker
 
 
-def _default_adapter_resolver(agent: Agent) -> AgentAdapter:
-    """Phase 4 默认只启用确定性 Mock；其他平台留给已配置的后续集成。"""
-    if agent.agent_type == AgentType.MOCK:
-        return MockAdapter(MockAdapterScript())
-    raise RuntimeError("Adapter is not configured")
+def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdapter]:
+    """按 Agent 类型装配 Adapter；真实凭据只从进程配置注入。"""
+
+    def resolve(agent: Agent) -> AgentAdapter:
+        if agent.agent_type == AgentType.MOCK:
+            return MockAdapter(MockAdapterScript())
+        if agent.agent_type == AgentType.OPENAI_COMPATIBLE:
+            dependencies = settings.runtime_dependencies()
+            return OpenAICompatibleAdapter(
+                base_url=dependencies.llm_base_url,
+                api_key=dependencies.llm_api_key,
+                model=dependencies.llm_model,
+            )
+        raise RuntimeError("Adapter is not configured")
+
+    return resolve
 
 
 def create_app(
@@ -71,7 +82,7 @@ def create_app(
         factory = async_sessionmaker(owned_engine, class_=AsyncSession, expire_on_commit=False)
     if factory is not None:
         application.state.chat_service = ChatService(
-            factory, broker, adapter_resolver or _default_adapter_resolver
+            factory, broker, adapter_resolver or _default_adapter_resolver(resolved_settings)
         )
     application.include_router(health_router)
     application.include_router(chat_router)

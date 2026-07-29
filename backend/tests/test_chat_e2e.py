@@ -38,6 +38,23 @@ class RaisingAdapter:
         return None
 
 
+class CapturingAdapter:
+    """记录服务层构造的任务，再委托确定性 Mock 产生回复。"""
+
+    def __init__(self, captured_tasks: list[AgentTask], reply: str) -> None:
+        self._captured_tasks = captured_tasks
+        self._delegate = MockAdapter(
+            MockAdapterScript(script=[MockScriptStep(action="delta", content=reply)])
+        )
+
+    def run(self, task: AgentTask) -> AsyncIterator[AgentEvent]:
+        self._captured_tasks.append(task)
+        return self._delegate.run(task)
+
+    def cancel(self, execution_id: uuid.UUID) -> None:
+        self._delegate.cancel(execution_id)
+
+
 @pytest_asyncio.fixture
 async def chat_context(
     db_engine: AsyncEngine,
@@ -172,6 +189,36 @@ async def test_segmented_reply_persists_complete_agent_message_and_stable_events
     assert len({event.event_id for event in events}) == len(events)
     assert events[-1].event_type == "execution.status"
     assert events[-1].payload["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_execution_passes_ordered_conversation_history_to_adapter(
+    chat_context: tuple[
+        AsyncClient,
+        async_sessionmaker[AsyncSession],
+        dict[uuid.UUID, Callable[[], AgentAdapter]],
+        Project,
+        Agent,
+        ChatService,
+    ],
+) -> None:
+    """第二轮执行应携带已持久化的 user/assistant/user 历史。"""
+    client, factory, adapters, project, agent, _ = chat_context
+    captured_tasks: list[AgentTask] = []
+    replies = iter(["第一次回答", "第二次回答"])
+    adapters[agent.id] = lambda: CapturingAdapter(captured_tasks, next(replies))
+    conversation_id = await _create_conversation(client, project.id, agent.id)
+
+    first_execution = await _submit(client, project.id, conversation_id, "第一次提问")
+    await _wait_for_status(factory, first_execution, ExecutionStatus.SUCCEEDED)
+    second_execution = await _submit(client, project.id, conversation_id, "第二次提问")
+    await _wait_for_status(factory, second_execution, ExecutionStatus.SUCCEEDED)
+
+    assert captured_tasks[1].context["messages"] == [
+        {"role": "user", "content": "第一次提问"},
+        {"role": "assistant", "content": "第一次回答"},
+        {"role": "user", "content": "第二次提问"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -310,6 +357,72 @@ async def test_missing_and_cross_project_resources_are_rejected(
     finally:
         async with factory() as session, session.begin():
             await session.execute(delete(Project).where(Project.id == other.id))
+
+
+@pytest.mark.asyncio
+async def test_conversation_title_agent_display_and_delete(
+    chat_context: tuple[
+        AsyncClient,
+        async_sessionmaker[AsyncSession],
+        dict[uuid.UUID, Callable[[], AgentAdapter]],
+        Project,
+        Agent,
+        ChatService,
+    ],
+) -> None:
+    client, factory, _, project, agent, _ = chat_context
+    create = await client.post(
+        f"/api/v1/projects/{project.id}/conversations",
+        json={"title": "用户不应控制此标题", "agent_id": str(agent.id)},
+    )
+    assert create.status_code == 201
+    conversation = create.json()
+    conversation_id = uuid.UUID(conversation["id"])
+    assert conversation["title"] == "新对话"
+    assert conversation["agent_name"] == "Mock Chat Agent"
+    assert conversation["agent_type"] == "mock"
+
+    submit = await client.post(
+        f"/api/v1/projects/{project.id}/conversations/{conversation_id}/messages",
+        json={"content": "  ##   修复   登录   问题  "},
+    )
+    assert submit.status_code == 202
+    await _wait_for_status(
+        factory, uuid.UUID(submit.json()["execution"]["id"]), ExecutionStatus.SUCCEEDED
+    )
+    listed = await client.get(f"/api/v1/projects/{project.id}/conversations")
+    updated = next(item for item in listed.json() if item["id"] == str(conversation_id))
+    assert updated["title"] == "修复 登录 问题"
+
+    deleted = await client.delete(f"/api/v1/projects/{project.id}/conversations/{conversation_id}")
+    assert deleted.status_code == 204
+    assert (
+        await client.get(f"/api/v1/projects/{project.id}/conversations/{conversation_id}")
+    ).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_active_conversation_cannot_be_deleted_until_cancelled(
+    chat_context: tuple[
+        AsyncClient,
+        async_sessionmaker[AsyncSession],
+        dict[uuid.UUID, Callable[[], AgentAdapter]],
+        Project,
+        Agent,
+        ChatService,
+    ],
+) -> None:
+    client, factory, adapters, project, agent, _ = chat_context
+    adapters[agent.id] = lambda: MockAdapter(
+        MockAdapterScript(script=[MockScriptStep(action="delay", milliseconds=1000)])
+    )
+    conversation_id = await _create_conversation(client, project.id, agent.id)
+    execution_id = await _submit(client, project.id, conversation_id, "等待")
+    await _wait_for_status(factory, execution_id, ExecutionStatus.RUNNING)
+    deleted = await client.delete(f"/api/v1/projects/{project.id}/conversations/{conversation_id}")
+    assert deleted.status_code == 409
+    await client.post(f"/api/v1/projects/{project.id}/executions/{execution_id}/cancel")
+    await _wait_for_status(factory, execution_id, ExecutionStatus.CANCELLED)
 
 
 @pytest.mark.asyncio
