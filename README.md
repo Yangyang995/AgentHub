@@ -1,16 +1,19 @@
 # AgentHub
 
-AgentHub 是本地优先的聊天式多 Agent 软件交付工作台。当前仓库处于 Phase 1，仅包含可运行的 FastAPI 基础服务、React 工作台外壳、质量工具和开发基础设施；聊天、数据库业务、RAG 与 Agent Adapter 尚未实现。
+AgentHub 是本地优先的聊天式多 Agent 软件交付工作台。当前仓库完成到 Phase 4 的 P0 单聊后端；群聊、`@Agent` 路由、Orchestrator 和聊天前端仍属于后续阶段。
 
 ## 当前能力
 
 - FastAPI 应用工厂与 `/health/live`、`/health/ready`。
 - 基于 `pydantic-settings` 的类型化配置和敏感值保护。
+- PostgreSQL 业务模型、Alembic 迁移和 `pg_trgm` 模糊搜索基础。
+- 单聊会话创建与查询、消息提交、Mock Adapter 分段执行和完整 Agent 消息持久化。
+- 可持久化、按执行序号补发的 WebSocket 事件，以及执行取消和安全错误映射。
 - React 19、React Router、TanStack Query 和 Lucide 工作台基础页面。
 - Ruff、mypy、pytest、ESLint、TypeScript、Vitest 和 Playwright 配置。
-- PostgreSQL + pgvector 的开发 Compose 配置骨架。
+- PostgreSQL + pgvector 的开发 Compose 配置。
 
-`/health/ready` 在 Phase 1 只表示应用配置已成功加载，不会连接数据库、LLM 或 Agent。外部依赖将在后续阶段加入真实探测。
+真实 Codex CLI Adapter 仍需显式健康检查；默认后端单聊流程使用确定性 Mock Adapter。
 
 ## 环境要求
 
@@ -38,7 +41,23 @@ API 默认地址为 `http://127.0.0.1:8000`：
 
 - `GET /health/live`
 - `GET /health/ready`
+- `POST /api/v1/projects/{project_id}/conversations`
+- `GET /api/v1/projects/{project_id}/conversations`
+- `GET /api/v1/projects/{project_id}/conversations/{conversation_id}`
+- `GET /api/v1/projects/{project_id}/conversations/{conversation_id}/messages`
+- `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/messages`
+- `POST /api/v1/projects/{project_id}/executions/{execution_id}/cancel`
+- `WS /ws/conversations/{conversation_id}?project_id={project_id}&execution_id={execution_id}&last_sequence={sequence}`
 - 非生产环境 OpenAPI：`GET /docs`
+
+WebSocket 补发游标中的 `last_sequence` 是排他游标，服务端返回该执行中序号更大的事件。`sequence` 只在单次执行内单调递增，因此补发时必须同时提供 `execution_id`。
+
+运行数据库迁移：
+
+```powershell
+cd D:\codexWorkPlace\AgentHub\backend
+uv run alembic upgrade head
+```
 
 后端质量检查：
 
@@ -72,18 +91,18 @@ npm.cmd run build
 npm.cmd run e2e
 ```
 
-Phase 1 的必需门禁不包含 Playwright 浏览器安装和 E2E 执行，但脚本与基础用例已经建立，后续界面阶段会将其纳入必需验收。
+聊天前端尚未进入 Phase 4 范围，浏览器端聊天 E2E 将在后续界面阶段纳入验收。
 
 ## 基础设施
 
-当前 Compose 只提供后续阶段使用的 PostgreSQL + pgvector 开发服务。检查解析后的 Compose 配置不会启动容器：
+Compose 提供 PostgreSQL + pgvector 开发服务。检查解析后的 Compose 配置不会启动容器：
 
 ```powershell
 cd D:\codexWorkPlace\AgentHub
 docker compose --env-file .env.example -f infra\compose.yaml config --quiet
 ```
 
-Phase 1 不执行数据库迁移，也不把 Compose 静态检查视为数据库已可用。
+Compose 静态检查不代表数据库已可用；后端数据库测试和迁移需要实际运行的 PostgreSQL。
 
 ## 目录
 
@@ -95,4 +114,3 @@ docs/      架构、API 与验收记录
 ```
 
 阶段范围、公共契约和后续顺序以 `AGENTS.md` 与 `DEVELOPMENT_PLAN.md` 为准。
-

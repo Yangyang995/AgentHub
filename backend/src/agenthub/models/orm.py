@@ -165,6 +165,13 @@ class Conversation(Base):
         index=True,
         comment="所属项目，删除项目时级联删除会话",
     )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+        comment="单聊绑定的 Agent；旧数据和后续群聊可为空",
+    )
     title: Mapped[str | None] = mapped_column(
         String(500), nullable=True, comment="会话标题（可为空）"
     )
@@ -330,6 +337,40 @@ class AgentExecution(Base):
     __table_args__ = (
         Index("ix_agent_executions_project_status", "project_id", "status"),
         Index("ix_agent_executions_agent_created", "agent_id", "created_at"),
+    )
+
+
+class ExecutionEvent(Base):
+    """已持久化的 WebSocket 事件信封，是断线补发的唯一数据源。"""
+
+    __tablename__ = "execution_events"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=_new_uuid
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    execution_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_executions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("execution_id", "sequence", name="uq_execution_events_sequence"),
+        Index("ix_execution_events_replay", "conversation_id", "execution_id", "sequence"),
     )
 
 

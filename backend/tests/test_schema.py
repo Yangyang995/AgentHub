@@ -66,6 +66,7 @@ EXPECTED_TABLES = [
     "conversations",
     "messages",
     "agent_executions",
+    "execution_events",
     "tasks",
     "task_dependencies",
     "artifacts",
@@ -76,7 +77,7 @@ EXPECTED_TABLES = [
 
 
 class TestTablesExist:
-    """所有 11 张表存在性检查。"""
+    """所有业务表存在性检查。"""
 
     @pytest.mark.parametrize("table_name", EXPECTED_TABLES)
     async def test_table_exists(self, db_session: AsyncSession, table_name: str) -> None:
@@ -92,6 +93,9 @@ class TestForeignKeys:
     async def test_conversations_fk_project(self, db_session: AsyncSession) -> None:
         assert await _fk_exists(db_session, "conversations", "project_id")
 
+    async def test_conversations_fk_agent(self, db_session: AsyncSession) -> None:
+        assert await _fk_exists(db_session, "conversations", "agent_id")
+
     async def test_messages_fk_conversation(self, db_session: AsyncSession) -> None:
         assert await _fk_exists(db_session, "messages", "conversation_id")
 
@@ -106,6 +110,9 @@ class TestForeignKeys:
 
     async def test_agent_executions_fk_agent(self, db_session: AsyncSession) -> None:
         assert await _fk_exists(db_session, "agent_executions", "agent_id")
+
+    async def test_execution_events_fk_execution(self, db_session: AsyncSession) -> None:
+        assert await _fk_exists(db_session, "execution_events", "execution_id")
 
     async def test_artifacts_fk_execution(self, db_session: AsyncSession) -> None:
         assert await _fk_exists(db_session, "artifacts", "execution_id")
@@ -140,6 +147,9 @@ class TestUniqueConstraints:
             db_session, "task_dependencies", ["task_id", "depends_on_task_id"]
         )
 
+    async def test_execution_events_sequence_unique(self, db_session: AsyncSession) -> None:
+        assert await _unique_exists(db_session, "execution_events", ["execution_id", "sequence"])
+
 
 class TestIndexes:
     """关键索引存在性检查。"""
@@ -157,6 +167,9 @@ class TestIndexes:
 
     async def test_approvals_project_status(self, db_session: AsyncSession) -> None:
         assert await _index_exists(db_session, "approvals", "ix_approvals_project_status")
+
+    async def test_execution_events_replay(self, db_session: AsyncSession) -> None:
+        assert await _index_exists(db_session, "execution_events", "ix_execution_events_replay")
 
 
 class TestPgTrgm:

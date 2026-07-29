@@ -124,6 +124,7 @@ class ConversationCreate(BaseModel):
 
     title: str | None = Field(default=None, max_length=500)
     conversation_type: ConversationType = ConversationType.DIRECT
+    agent_id: uuid.UUID
 
 
 class ConversationResponse(BaseModel):
@@ -133,6 +134,7 @@ class ConversationResponse(BaseModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
+    agent_id: uuid.UUID | None
     title: str | None
     conversation_type: ConversationType
     created_at: datetime
@@ -150,6 +152,32 @@ class MessageCreate(BaseModel):
     content_type: str = "text"
     agent_id: uuid.UUID | None = None
     parent_message_id: uuid.UUID | None = None
+
+
+class UserMessageCreate(BaseModel):
+    """单聊消息提交请求；角色和 Agent 由服务端依据会话确定。"""
+
+    content: str = Field(min_length=1)
+    content_type: str = Field(default="text", max_length=50)
+
+
+class MessageSubmissionResponse(BaseModel):
+    """原子创建的用户消息和待执行记录。"""
+
+    message: "MessageResponse"
+    execution: "AgentExecutionResponse"
+
+
+class EventEnvelope(BaseModel):
+    """持久化和 WebSocket 共用的事件信封。"""
+
+    event_id: uuid.UUID
+    conversation_id: uuid.UUID
+    execution_id: uuid.UUID
+    sequence: int = Field(ge=0)
+    type: str
+    timestamp: datetime
+    payload: dict[str, Any]
 
 
 class MessageResponse(BaseModel):
