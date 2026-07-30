@@ -117,7 +117,7 @@ afterEach(() => {
 })
 
 describe('WorkbenchPage', () => {
-  it('新建单聊固定提供三种运行提供方且不暴露 Agent 管理', async () => {
+  it('新建单聊默认 DeepSeek，无需选择提供方', async () => {
     let submittedBody: unknown = null
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url.endsWith('/conversations') && init?.method === 'POST') {
@@ -139,27 +139,22 @@ describe('WorkbenchPage', () => {
     renderWorkbench()
     await screen.findByRole('heading', { name: '登录问题' })
 
-    expect(screen.queryByRole('button', { name: '管理 Agent' })).not.toBeInTheDocument()
+    // 打开新建表单，单聊直接创建（无提供方选择）
     await user.click(screen.getByRole('button', { name: '新建会话' }))
-    expect(screen.getByRole('radio', { name: /DeepSeek/ })).toBeInTheDocument()
-    expect(screen.getAllByRole('radio')).toHaveLength(1)
-    expect(screen.queryByLabelText('Agent 名称')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: /DeepSeek/ }))
-    await user.click(screen.getByRole('button', { name: '创建' }))
+    expect(screen.getByTestId('create-conversation-btn')).toBeInTheDocument()
+    // 确认没有提供方选择器
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('create-conversation-btn'))
 
     await waitFor(() => {
       expect(submittedBody).toEqual({
         title: null,
         conversation_type: 'direct',
-        provider: 'deepseek',
       })
-    })
-    await waitFor(() => {
-      expect(screen.getAllByText('DeepSeek').length).toBeGreaterThan(0)
     })
   })
 
-  it('显示空会话并支持打开新建表单', async () => {
+  it('显示空会话并支持打开新建表单（单聊直接创建）', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       if (url.includes('/conversations')) return response([])
       return response({ status: 'ready', service: 'AgentHub API', checks: { configuration: 'ok' } })
@@ -172,7 +167,7 @@ describe('WorkbenchPage', () => {
     if (mainButton === undefined) throw new Error('缺少主新建会话按钮')
     await user.click(mainButton)
     expect(screen.getByRole('heading', { name: '暂无活动会话' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument()
+    expect(screen.getByTestId('create-conversation-btn')).toBeInTheDocument()
     expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
   })
 
@@ -198,7 +193,7 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText('等待内容…')).toBeInTheDocument()
   })
 
-  it('新会话使用默认标题，首条消息后刷新为问题摘要', async () => {
+  it('新会话使用默认标题，首条消息后刷新为问题摘要（单聊直接创建）', async () => {
     let conversations = [conversation]
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url.endsWith('/conversations') && init?.method === 'POST') return response({ ...conversation, title: '新对话' }, 201)
@@ -215,7 +210,7 @@ describe('WorkbenchPage', () => {
     renderWorkbench()
     await screen.findByRole('heading', { name: '登录问题' })
     await user.click(screen.getByRole('button', { name: '新建会话' }))
-    await user.click(screen.getByRole('button', { name: '创建' }))
+    await user.click(screen.getByTestId('create-conversation-btn'))
     expect(await screen.findByRole('heading', { name: '新对话' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('输入消息'), '如何修复登录问题')
     await user.click(screen.getByRole('button', { name: '发送消息' }))

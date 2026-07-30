@@ -1,4 +1,4 @@
-"""AgentHub FastAPI 应用入口。"""
+﻿"""AgentHub FastAPI 应用入口。"""
 
 import asyncio
 from collections.abc import Callable
@@ -22,16 +22,23 @@ from agenthub.api.routes.agents import router as agents_router
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.chat import websocket_router
 from agenthub.api.routes.health import router as health_router
+from agenthub.api.routes.projects import router as projects_router
 from agenthub.core.config import Settings, get_settings
 from agenthub.models.enums import AgentType
 from agenthub.models.orm import Agent
 from agenthub.services.agents import AgentService
 from agenthub.services.chat import AgentAdapter, ChatService
+from agenthub.services.project import ProjectService
+from agenthub.services.prompt_loader import load_system_prompt
 from agenthub.services.realtime import ConversationEventBroker
 
 
 def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdapter]:
-    """按 Agent 类型装配 Adapter；真实凭据只从进程配置注入。"""
+    """按 Agent 类型装配 Adapter，并根据 Agent 能力注入对应的 System Prompt。
+
+    对于 OPENAI_COMPATIBLE 类型的 Agent，若其 adapter_config_ref 指向已知能力，
+    则从 prompts/agents/ 加载对应 System Prompt 并注入 Adapter。
+    """
 
     def resolve(agent: Agent) -> AgentAdapter:
         if agent.agent_type == AgentType.MOCK:
@@ -53,10 +60,15 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
             )
         if agent.agent_type == AgentType.OPENAI_COMPATIBLE:
             dependencies = settings.runtime_dependencies()
+            # 根据 Agent 的能力配置加载对应 System Prompt
+            system_prompt: str | None = None
+            if agent.adapter_config_ref is not None:
+                system_prompt = load_system_prompt(agent.adapter_config_ref)
             return OpenAICompatibleAdapter(
                 base_url=dependencies.llm_base_url,
                 api_key=dependencies.llm_api_key,
                 model=dependencies.llm_model,
+                system_prompt=system_prompt,
             )
         raise RuntimeError("Adapter is not configured")
 
@@ -104,10 +116,12 @@ def create_app(
         factory = async_sessionmaker(owned_engine, class_=AsyncSession, expire_on_commit=False)
     if factory is not None:
         application.state.agent_service = AgentService(factory)
+        application.state.project_service = ProjectService(factory)
         application.state.chat_service = ChatService(
             factory, broker, adapter_resolver or _default_adapter_resolver(resolved_settings)
         )
     application.include_router(health_router)
+    application.include_router(projects_router)
     application.include_router(agents_router)
     application.include_router(chat_router)
     application.include_router(websocket_router)

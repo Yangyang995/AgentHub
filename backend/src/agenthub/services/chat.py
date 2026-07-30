@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
+import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -76,10 +77,31 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _conversation_title(content: str) -> str:
-    """将首条问题压缩为稳定短标题，避免新建会话时额外调用模型。"""
-    title = " ".join(content.split()).strip().strip("#*`> ")
-    return title[:36] if title else "新对话"
+async def _generate_title_via_llm(content: str, api_key: str, base_url: str, model: str) -> str:
+    """通过 LLM 将首条问题提炼为 10 字以内的关键词标题。"""
+    prompt = (
+        "将以下用户提问总结为10个字以内的中文关键词标题，"
+        "只输出标题本身，不加引号和解释：\n\n" + content
+    )
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15)) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 20,
+                    "temperature": 0.3,
+                },
+            )
+            if resp.status_code < 400:
+                data = resp.json()
+                title = data["choices"][0]["message"]["content"].strip()
+                return title[:20] if title else "新对话"
+    except Exception:
+        pass
+    return "新对话"
 
 
 def _conversation_response(conversation: Conversation, agent: Agent | None) -> ConversationResponse:
@@ -157,31 +179,44 @@ class ChatService:
         self._execution_locks: dict[uuid.UUID, asyncio.Lock] = {}
         self._running_adapters: dict[uuid.UUID, AgentAdapter] = {}
 
+    async def _update_title_from_llm(
+        self, project_id: uuid.UUID, conversation_id: uuid.UUID, content: str
+    ) -> None:
+        """后台任务：通过 LLM 提炼会话标题并持久化。"""
+        try:
+            from agenthub.core.config import get_settings
+            settings = get_settings()
+            deps = settings.runtime_dependencies()
+            title = await _generate_title_via_llm(
+                content,
+                deps.llm_api_key.get_secret_value(),
+                deps.llm_base_url,
+                deps.llm_model,
+            )
+            if title and title != "新对话":
+                async with self._sessions() as session, session.begin():
+                    conv = await session.get(Conversation, conversation_id)
+                    if conv is not None and conv.title in (None, "", "新对话"):
+                        conv.title = title
+                        conv.updated_at = _utcnow()
+        except Exception:
+            pass  # 标题生成失败不影响主流程
+
     async def create_conversation(
         self, project_id: uuid.UUID, data: ConversationCreate
     ) -> ConversationResponse | GroupConversationResponse:
-        """创建兼容单聊或至少包含两个项目 Agent 的群聊。"""
+        """创建单聊或群聊。
+        单聊默认使用 DeepSeek；群聊默认包含项目中全部启用的 Agent。
+        """
         async with self._sessions() as session, session.begin():
             project = await session.get(Project, project_id)
             if project is None:
                 raise ChatNotFoundError
             if data.conversation_type == ConversationType.DIRECT:
-                if (
-                    data.participant_agent_ids is not None
-                    or (data.agent_id is None and data.provider is None)
-                    or (data.agent_id is not None and data.provider is not None)
-                ):
-                    raise ChatConflictError("单聊必须且只能指定一个提供方或 Agent")
-                if data.provider is not None:
-                    agent = await self._get_or_create_provider_agent(
-                        session, project_id, data.provider
-                    )
-                else:
-                    assert data.agent_id is not None
-                    selected_agent = await session.get(Agent, data.agent_id)
-                    if selected_agent is None or selected_agent.project_id != project_id:
-                        raise ChatNotFoundError
-                    agent = selected_agent
+                # 单聊：默认使用 DeepSeek 提供方
+                agent = await self._get_or_create_provider_agent(
+                    session, project_id, "deepseek"
+                )
                 if agent.status != AgentStatus.ENABLED:
                     raise ChatConflictError("Agent 未启用")
                 conversation = Conversation(
@@ -193,7 +228,21 @@ class ChatService:
                 session.add(conversation)
                 await session.flush()
                 return _conversation_response(conversation, agent)
-            participant_ids = list(dict.fromkeys(data.participant_agent_ids or []))
+            # 群聊：若未指定参与者，自动包含项目中全部启用的 Agent
+            if data.participant_agent_ids:
+                participant_ids = list(dict.fromkeys(data.participant_agent_ids))
+            else:
+                # 仅选取已配置 System Prompt 的预置子 Agent，不包含后台动态创建的提供方 Agent
+                all_agents = await session.scalars(
+                    select(Agent).where(
+                        Agent.project_id == project_id,
+                        Agent.status == AgentStatus.ENABLED,
+                        Agent.adapter_config_ref.isnot(None),
+                    )
+                )
+                participant_ids = [a.id for a in all_agents]
+            if len(participant_ids) < 2:
+                raise ChatConflictError("群聊至少需要两个参与者，请先在项目中注册 Agent")
             if data.agent_id is not None or len(participant_ids) < 2:
                 raise ChatConflictError("群聊必须指定至少两个唯一参与 Agent")
             agents = list(
@@ -357,8 +406,9 @@ class ChatService:
             disabled = [agent.name for agent in targets if agent.status != AgentStatus.ENABLED]
             if disabled:
                 raise ChatConflictError(f"Agent 已禁用: {', '.join(disabled)}")
-            if conversation.title in (None, "", "新对话"):
-                conversation.title = _conversation_title(data.content)
+            first_message = conversation.title in (None, "", "新对话")
+            if first_message:
+                conversation.title = "新对话"  # 占位，后台异步生成
             conversation.updated_at = _utcnow()
             sequence = await self._next_message_sequence(session, conversation_id)
             message = Message(
@@ -385,6 +435,12 @@ class ChatService:
             session.add_all(executions)
             conversation.status = ConversationStatus.RUNNING
             await session.flush()
+            # 后台异步生成会话标题（仅首次消息时触发）
+            if first_message:
+                import asyncio as _asyncio
+                _title_task = _asyncio.create_task(self._update_title_from_llm(  # noqa: RUF006
+                    project_id, conversation_id, data.content
+                ))
             if conversation.conversation_type == ConversationType.DIRECT:
                 response: MessageSubmissionResponse | GroupMessageSubmissionResponse = (
                     MessageSubmissionResponse(
@@ -461,7 +517,8 @@ class ChatService:
                     break
                 if isinstance(event, ContentDeltaEvent):
                     content.append(event.delta)
-                    await self._broker.publish(persisted)
+                # 所有事件（含状态变更）都推送到 WebSocket，前端据此更新取消按钮等 UI
+                await self._broker.publish(persisted)
         except Exception:
             # Adapter exception - use safe failure
             await self._persist_safe_failure(execution_id)

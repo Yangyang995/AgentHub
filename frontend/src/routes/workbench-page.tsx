@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   cancelExecution,
   createConversation,
+  createGroupConversation,
   deleteConversation,
   isGroupConversation,
   listAgents,
@@ -26,7 +27,6 @@ import {
   submissionExecutions,
   workspaceConfig,
   type Agent,
-  type ChatProvider,
   type Conversation,
   type ExecutionStatus,
   type Message,
@@ -46,10 +46,6 @@ interface StreamMessage {
   error?: string
 }
 
-const providerOptions: readonly { value: ChatProvider; label: string; detail: string }[] = [
-  { value: 'deepseek', label: 'DeepSeek', detail: '模型 API' },
-]
-
 function statusLabel(status: ExecutionStatus) {
   const labels: Record<ExecutionStatus, string> = {
     pending: '等待执行',
@@ -65,22 +61,32 @@ export function WorkbenchPage() {
   const queryClient = useQueryClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [newConversationOpen, setNewConversationOpen] = useState(false)
+  const [conversationMode, setConversationMode] = useState<'direct' | 'group'>('direct')
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [selectedProvider, setSelectedProvider] = useState<ChatProvider>('deepseek')
   const [streams, setStreams] = useState<Record<string, StreamMessage>>({})
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
+
+  const [projectReady, setProjectReady] = useState(false)
+
+  // 启动时自动初始化项目（创建默认工作区并播种 6 个预设 Agent）
+  useEffect(() => {
+    workspaceConfig.init().then(() => { setProjectReady(true) }).catch(() => { setProjectReady(true) })
+  }, [])
 
   const conversations = useQuery({
     queryKey: ['conversations', workspaceConfig.projectId],
     queryFn: ({ signal }) => listConversations(signal),
+    enabled: projectReady && workspaceConfig.projectId !== '',
   })
 
   const agents = useQuery({
     queryKey: ['agents', workspaceConfig.projectId],
     queryFn: ({ signal }) => listAgents(signal),
+    enabled: projectReady && workspaceConfig.projectId !== '',
   })
 
   const selectedConversationId = activeConversationId ?? conversations.data?.[0]?.id ?? null
@@ -164,8 +170,12 @@ export function WorkbenchPage() {
   )
 
   const createMutation = useMutation({
-    mutationFn: () => createConversation(selectedProvider),
+    mutationFn: () =>
+      conversationMode === 'group'
+        ? createGroupConversation()
+        : createConversation(),
     onSuccess: (conversation) => {
+      setCreateError(null)
       queryClient.setQueryData(
         ['conversations', workspaceConfig.projectId],
         (current: typeof conversations.data) => [conversation, ...(current ?? [])],
@@ -173,6 +183,9 @@ export function WorkbenchPage() {
       setActiveConversationId(conversation.id)
       setNewConversationOpen(false)
       setSidebarOpen(false)
+    },
+    onError: (error: Error) => {
+      setCreateError(error.message || '创建失败，请检查提供方和本地运行环境。')
     },
   })
 
@@ -302,20 +315,26 @@ export function WorkbenchPage() {
 
         <div className="sidebar-actions">
           <span className="section-label">会话</span>
-          <button className="icon-button" type="button" aria-label="新建会话" title="新建会话" onClick={() => { setNewConversationOpen(true); }}>
+          <button className="icon-button" type="button" aria-label="新建会话" title="新建会话" onClick={() => { setNewConversationOpen(true); setCreateError(null); }}>
             <Plus aria-hidden="true" size={18} />
           </button>
         </div>
 
         {newConversationOpen ? (
-          <form className="new-conversation-form" onSubmit={(event) => { event.preventDefault(); createMutation.mutate() }}>
-            <div className="form-heading"><strong>新建会话</strong><button className="icon-button" type="button" aria-label="关闭新建会话" onClick={() => { setNewConversationOpen(false); }}><X aria-hidden="true" size={16} /></button></div>
-            <p className="new-conversation-note">新会话初始名称为“新对话”，发送第一条消息后会自动生成短标题。</p>
-            <fieldset className="provider-picker"><legend>运行提供方</legend>{providerOptions.map((provider) => <label key={provider.value} className='is-selected'><input type="radio" name="provider" value={provider.value} checked onChange={() => { setSelectedProvider(provider.value) }} /><span><strong>{provider.label}</strong><small>{provider.detail}</small></span></label>)}</fieldset>
-            {createMutation.isError ? <p className="inline-error" role="alert">创建失败，请检查提供方和本地运行环境。</p> : null}
-            <button className="primary-button" type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? '创建中' : '创建'}</button>
-          </form>
-        ) : null}
+                                        <form className="new-conversation-form" onSubmit={(event) => { event.preventDefault(); createMutation.mutate() }}>
+            <div className="form-heading"><strong>{conversationMode === 'group' ? '新建群聊' : '新建会话'}</strong><button className="icon-button" type="button" aria-label="关闭新建会话" onClick={() => { setNewConversationOpen(false); }}><X aria-hidden="true" size={16} /></button></div>
+            <div className="conversation-mode-toggle">
+              <button type="button" className={`mode-option${conversationMode === 'direct' ? ' is-active' : ''}`} onClick={() => { setConversationMode('direct'); setCreateError(null); }}><MessageSquare aria-hidden="true" size={15} />单聊</button>
+              <button type="button" className={`mode-option${conversationMode === 'group' ? ' is-active' : ''}`} onClick={() => { setConversationMode('group'); setCreateError(null); }}><MessageSquare aria-hidden="true" size={15} />群聊</button>
+            </div>
+            {conversationMode === 'group' ? (
+              <p className="new-conversation-note">群聊会自动包含项目中全部启用的子 Agent，在群聊中通过 @名称 点名并行执行。</p>
+            ) : (
+              <p className="new-conversation-note">单聊默认使用 DeepSeek 模型，发送第一条消息后会自动生成短标题。</p>
+            )}
+            {createMutation.isError ? <p className="inline-error" role="alert">{createError ?? '创建失败，请检查提供方和本地运行环境。'}</p> : null}
+            <button className="primary-button" type="submit" data-testid="create-conversation-btn" disabled={createMutation.isPending}>{createMutation.isPending ? '创建中' : '创建'}</button>
+          </form>        ) : null}
 
         <nav className="conversation-nav" aria-label="会话列表">
           {conversations.isPending ? <p className="sidebar-note" role="status">正在加载会话…</p> : null}
@@ -325,7 +344,7 @@ export function WorkbenchPage() {
             <div key={conversation.id} className={`conversation-item${conversation.id === selectedConversationId ? ' conversation-item--active' : ''}`}>
               <MessageSquare aria-hidden="true" size={16} />
               <button className="conversation-item__select" type="button" onClick={() => { setActiveConversationId(conversation.id); setFailedDraft(null); setSidebarOpen(false) }}>
-                <strong>{conversation.title ?? '新对话'}</strong><small>{new Date(conversation.updated_at).toLocaleString()}</small>
+                <strong>{conversation.title ?? '新对话'}</strong><small>{new Date(conversation.updated_at).toLocaleString()}<span className={`conversation-type-badge${isGroupConversation(conversation) ? ' conversation-type-badge--group' : ''}`}>{isGroupConversation(conversation) ? '群聊' : '单聊'}</span></small>
               </button>
               <button className="conversation-item__delete" type="button" aria-label="删除会话" title="删除会话" disabled={deleteMutation.isPending} onClick={() => { deleteMutation.mutate(conversation.id) }}>
                 <Trash2 aria-hidden="true" size={14} />
@@ -342,12 +361,18 @@ export function WorkbenchPage() {
           {activeConversation ? <span className="agent-badge">{isGroupConversation(activeConversation) ? activeConversation.participants.map((agent) => agent.name).join(' · ') : activeConversation.agent_name ?? 'Agent'}</span> : null}
         </header>
 
-        {selectedConversationId === null ? (
+        {!projectReady ? (
+          <section className="empty-workspace" aria-labelledby="empty-title">
+            <div className="empty-symbol" aria-hidden="true"><Bot size={28} /></div>
+            <h2 id="empty-title">正在初始化工作区</h2>
+            <p>正在创建默认项目和预设 Agent…</p>
+          </section>
+        ) : selectedConversationId === null ? (
           <section className="empty-workspace" aria-labelledby="empty-title">
             <div className="empty-symbol" aria-hidden="true"><Bot size={28} /></div>
             <h2 id="empty-title">暂无活动会话</h2>
             <p>从左侧新建单聊会话开始</p>
-            <button className="primary-button" type="button" onClick={() => { setNewConversationOpen(true); setSidebarOpen(true) }}><Plus aria-hidden="true" size={16} />新建会话</button>
+            <button className="primary-button" type="button" onClick={() => { setNewConversationOpen(true); setCreateError(null); setSidebarOpen(true) }}><Plus aria-hidden="true" size={16} />新建会话</button>
           </section>
         ) : (
           <section className="conversation-panel" aria-label="当前会话">
@@ -364,12 +389,12 @@ export function WorkbenchPage() {
                   {stream.error ? <p className="inline-error" role="alert">{stream.error}</p> : null}
                 </article>
               ))}
-            </div>
             {showScrollToBottom ? (
               <button className="scroll-to-bottom" type="button" aria-label="回到最新消息" title="回到最新消息" onClick={scrollToLatestMessage}>
                 <ArrowDown aria-hidden="true" size={20} />
               </button>
             ) : null}
+            </div>
 
             <form className="composer" onSubmit={(event) => { event.preventDefault(); sendCurrentDraft() }}>
               {sendMutation.isError ? <div className="composer-error" role="alert"><span>消息发送失败。</span><button type="button" onClick={() => { if (failedDraft !== null) sendMutation.mutate({ conversationId: selectedConversationId, content: failedDraft }); }}><RefreshCw aria-hidden="true" size={14} />重试</button></div> : null}

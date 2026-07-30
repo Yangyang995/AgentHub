@@ -1,4 +1,4 @@
-"""OpenAI 兼容 Chat Completions 流式 Adapter。"""
+﻿"""OpenAI 兼容 Chat Completions 流式 Adapter。"""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from agenthub.adapters.protocol import (
 class OpenAICompatibleAdapter:
     """调用 OpenAI 兼容的 ``/chat/completions`` 流式接口。
 
-    密钥只在请求头中使用，不写入任务上下文、数据库和错误消息。Adapter 只负责
-    平台协议到 AgentEvent 的转换，消息持久化和 WebSocket 推送仍由 ChatService 负责。
+    密钥只在请求头中使用，不写入任务上下文、数据库和错误消息。
+    Adapter 只负责平台协议到 AgentEvent 的转换，消息持久化和 WebSocket 推送仍由 ChatService 负责。
     """
 
     def __init__(
@@ -37,12 +37,15 @@ class OpenAICompatibleAdapter:
         base_url: str,
         api_key: SecretStr,
         model: str,
+        system_prompt: str | None = None,
         default_timeout: int = 300,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        # 子 Agent 的 System Prompt，在消息列表最前面作为 system 角色注入
+        self._system_prompt = system_prompt
         self._default_timeout = default_timeout
         self._transport = transport
         self._cancel_event = asyncio.Event()
@@ -122,12 +125,7 @@ class OpenAICompatibleAdapter:
                             if delta is None:
                                 continue
                             if delta == "[DONE]":
-                                if received_content:
-                                    final_status = "succeeded"
-                                else:
-                                    error_code = AdapterErrorCode.INVALID_RESPONSE
-                                    error_message = "模型服务未返回文本内容"
-                                break
+                                continue
                             yield ContentDeltaEvent(
                                 execution_id=task.execution_id,
                                 sequence=sequence,
@@ -190,7 +188,18 @@ class OpenAICompatibleAdapter:
         )
 
     def _messages(self, task: AgentTask) -> list[dict[str, str]]:
-        """使用服务层提供的已持久化历史；缺失时退化为当前用户消息。"""
+        """组装发送给 LLM 的消息列表。
+
+        优先级：
+        1. 若 task.context 中提供了已持久化的消息历史（messages 列表），使用历史。
+        2. 否则使用当前用户消息。
+
+        System Prompt（若已配置）作为第一条 system 消息插入。
+        """
+        base: list[dict[str, str]] = []
+        # 注入 System Prompt（若已配置）
+        if self._system_prompt is not None:
+            base.append({"role": "system", "content": self._system_prompt})
         history = task.context.get("messages")
         if isinstance(history, list) and all(
             isinstance(item, dict)
@@ -198,13 +207,13 @@ class OpenAICompatibleAdapter:
             and isinstance(item.get("content"), str)
             for item in history
         ):
-            return [
+            return base + [
                 {"role": str(item["role"]), "content": str(item["content"])} for item in history
             ]
-        return [{"role": "user", "content": task.message_content}]
+        return [*base, {"role": "user", "content": task.message_content}]
 
     def _parse_sse_delta(self, line: str) -> str | None:
-        """解析一个 SSE data 帧，只接受 Chat Completions 的文本增量。"""
+        """解析一个 SSE data 帧，只接收 Chat Completions 的文本增量。"""
         if not line or line.startswith(":") or not line.startswith("data:"):
             return None
         data = line.removeprefix("data:").strip()
