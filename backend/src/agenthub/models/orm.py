@@ -31,6 +31,7 @@ from agenthub.models.enums import (
     ApprovalActionType,
     ApprovalStatus,
     ArtifactType,
+    ConversationStatus,
     ConversationType,
     DeploymentProvider,
     DeploymentStatus,
@@ -142,6 +143,9 @@ class Agent(Base):
     project: Mapped["Project"] = relationship(back_populates="agents")
     messages: Mapped[list["Message"]] = relationship(back_populates="agent")
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="agent")
+    conversation_participations: Mapped[list["ConversationParticipant"]] = relationship(
+        back_populates="agent", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint("project_id", "name", name="uq_agents_project_name"),
@@ -178,6 +182,9 @@ class Conversation(Base):
     conversation_type: Mapped[ConversationType] = mapped_column(
         String(20), nullable=False, default=ConversationType.DIRECT
     )
+    status: Mapped[ConversationStatus] = mapped_column(
+        String(30), nullable=False, default=ConversationStatus.IDLE
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
@@ -197,8 +204,39 @@ class Conversation(Base):
     )
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="conversation")
     tasks: Mapped[list["Task"]] = relationship(back_populates="conversation")
+    participants: Mapped[list["ConversationParticipant"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("ix_conversations_project_updated", "project_id", "updated_at"),)
+
+
+class ConversationParticipant(Base):
+    """群聊参与者关联；项目 ID 冗余用于查询时强制项目隔离。"""
+
+    __tablename__ = "conversation_participants"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="RESTRICT"), primary_key=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="participants")
+    agent: Mapped["Agent"] = relationship(back_populates="conversation_participations")
+
+    __table_args__ = (
+        Index("ix_conversation_participants_project", "project_id", "conversation_id"),
+    )
 
 
 # ── Message ────────────────────────────────────────────────────────────────

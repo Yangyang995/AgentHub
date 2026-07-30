@@ -210,7 +210,7 @@ class AdapterHealth(BaseModel):
     """
 
     healthy: bool
-    adapter_type: str = Field(description="适配器类型标识：mock / codex_cli")
+    adapter_type: str = Field(description="适配器类型标识：mock / openai_compatible")
     version: str | None = Field(default=None, description="适配器或底层工具版本")
     message: str | None = Field(default=None, description="健康状态附加说明，不可用时应给出原因")
     checked_at: datetime = Field(

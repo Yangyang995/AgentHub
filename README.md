@@ -1,41 +1,68 @@
-# AgentHub
+﻿# AgentHub
 
-AgentHub 是本地优先的聊天式多 Agent 软件交付工作台。当前仓库完成到 Phase 5 的 P0 单聊前后端；群聊、`@Agent` 路由和 Orchestrator 仍属于后续阶段。
+AgentHub 是**以群聊写代码为核心的**多 Agent 软件交付工作台。开发者可以在群聊中 `@子Agent` 分派开发任务，也可以直接发送需求，由 Orchestrator 自动拆解并调度子 Agent（需求分析、架构设计、代码生成、代码审查、测试、技术报告撰写）各司其职，完成从需求到部署的全流程。
 
-## 当前能力
+单聊模式仅支持 DeepSeek（OpenAI 兼容接口），提供轻量高效的对话式编程体验。
 
-- FastAPI 应用工厂与 `/health/live`、`/health/ready`。
-- 基于 `pydantic-settings` 的类型化配置和敏感值保护。
-- PostgreSQL 业务模型、Alembic 迁移和 `pg_trgm` 模糊搜索基础。
-- 单聊会话创建与查询、消息提交、OpenAI 兼容模型流式执行和完整 Agent 消息持久化。
-- 可持久化、按执行序号补发的 WebSocket 事件，以及执行取消和安全错误映射。
-- React 19、React Router、TanStack Query 和 Lucide 单聊工作台，支持流式回复、断线重连、取消和 Markdown 展示。
-- Ruff、mypy、pytest、ESLint、TypeScript、Vitest 和 Playwright 配置。
-- PostgreSQL + pgvector 的开发 Compose 配置。
+## 当前状态
 
-默认后端单聊可通过 `openai_compatible` Agent 调用 DeepSeek 等 OpenAI 兼容模型；
-确定性 Mock Adapter 继续用于自动化测试。真实 Codex CLI Adapter 仍需显式健康检查。
+项目目前完成到 Phase 4（REST API、WebSocket、Mock Adapter），Phase 5-11 的详细计划见 `DEVELOPMENT_PLAN.md`。
+
+已完成：
+- FastAPI 应用工厂、类型化配置、敏感信息保护
+- PostgreSQL 业务模型、Alembic 迁移、pgvector 扩展基础
+- Pydantic v2 Schema、仓储层、聊天消息核心服务
+- REST API（`/api/v1`）、WebSocket 实时推送
+- Mock Adapter 和确定性测试
+
+## 预置子 Agent
+
+群聊模式下预置 6 个垂直代码子 Agent：
+
+| Agent | 能力 | 职责 |
+|---|---|---|
+| 需求分析专家 | requirement_analysis | 模糊需求 → 结构化需求规格 |
+| 架构设计专家 | architecture_design | 需求规格 → 架构设计文档 |
+| 代码生成专家 | code_generation | 设计文档 → 高质量代码 |
+| 代码审查专家 | code_review | 代码质量、安全性和最佳实践审查 |
+| 测试专家 | testing | 验收标准 → 测试用例与代码 |
+| 技术报告撰写专家 | documentation | 分析结果 → 结构化技术报告 |
+
+群聊中使用 `@Agent名` 直接路由到指定 Agent，无 @ 时由 Orchestrator 自动拆解调度。
+
+## 技术栈
+
+- **后端**：Python 3.13, FastAPI, Pydantic v2, SQLAlchemy 2 (async), asyncpg, Alembic, LangGraph
+- **数据库**：PostgreSQL + pgvector + pg_trgm
+- **前端**：React 19, Vite, TypeScript strict, React Router, TanStack Query, Lucide
+- **基础设施**：Docker Compose
+- **质量**：Ruff, mypy, pytest, ESLint, Vitest, Playwright
 
 ## 环境要求
 
-- Python 3.13
+- Python 3.13+
 - uv
 - Node.js 24 或兼容版本
-- npm
-- Docker Desktop，可选，仅用于检查或运行开发基础设施
-
-Windows PowerShell 的执行策略可能阻止 `npm.ps1`，本项目命令统一使用 `npm.cmd`。
+- npm（Windows 上使用 `npm.cmd`）
+- Docker Desktop（可选，用于运行开发基础设施）
 
 ## 首次配置
 
-根目录 `.env.example` 只包含占位符。需要本地配置时创建未被 Git 跟踪的 `.env`，并替换 `YOUR_API_KEY_HERE` 等假值。不要在命令输出、问题记录或提交中展示真实配置。
-
-使用 DeepSeek 时配置 OpenAI 兼容接口，密钥只保存在本地 `.env`：
+根目录 `.env.example` 只包含占位符。需要本地配置时创建未被 Git 跟踪的 `.env`，并替换 `YOUR_API_KEY_HERE` 等假值。
 
 ```dotenv
+# DeepSeek（单聊和子Agent共用）
 AGENTHUB_LLM_BASE_URL=https://api.deepseek.com/v1
 AGENTHUB_LLM_API_KEY=YOUR_API_KEY_HERE
 AGENTHUB_LLM_MODEL=deepseek-chat
+
+# PostgreSQL
+AGENTHUB_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agenthub
+
+# Embedding（RAG 知识库，Phase 8）
+AGENTHUB_EMBEDDING_BASE_URL=https://api.deepseek.com/v1
+AGENTHUB_EMBEDDING_API_KEY=YOUR_API_KEY_HERE
+AGENTHUB_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 ## 后端开发
@@ -46,20 +73,8 @@ uv sync --all-groups
 uv run uvicorn agenthub.main:app --reload
 ```
 
-API 默认地址为 `http://127.0.0.1:8000`：
-
-- `GET /health/live`
-- `GET /health/ready`
-- `POST /api/v1/projects/{project_id}/conversations`
-- `GET /api/v1/projects/{project_id}/conversations`
-- `GET /api/v1/projects/{project_id}/conversations/{conversation_id}`
-- `GET /api/v1/projects/{project_id}/conversations/{conversation_id}/messages`
-- `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/messages`
-- `POST /api/v1/projects/{project_id}/executions/{execution_id}/cancel`
-- `WS /ws/conversations/{conversation_id}?project_id={project_id}&execution_id={execution_id}&last_sequence={sequence}`
-- 非生产环境 OpenAPI：`GET /docs`
-
-WebSocket 补发游标中的 `last_sequence` 是排他游标，服务端返回该执行中序号更大的事件。`sequence` 只在单次执行内单调递增，因此补发时必须同时提供 `execution_id`。
+API 默认地址为 `http://127.0.0.1:8000`。
+非生产环境 OpenAPI 文档：`GET /docs`
 
 运行数据库迁移：
 
@@ -87,20 +102,13 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-启动前在根目录 `.env` 中配置已注册项目和 Agent 的公开 UUID：
+启动前在根目录 `.env` 中配置已注册项目的 UUID：
 
 ```dotenv
 VITE_PROJECT_ID=00000000-0000-0000-0000-000000000001
-VITE_AGENT_ID=00000000-0000-0000-0000-000000000002
 ```
 
-Phase 4 尚未提供项目和 Agent 列表接口，因此这两个值由部署配置提供，不是密钥。Vite 默认地址为 `http://127.0.0.1:5173`，开发代理会把 `/health`、`/api` 和 `/ws` 转发到本机 `8000` 端口的后端。
-
-前端 API 类型由实际 FastAPI OpenAPI 和 Pydantic 事件 Schema 生成。`typecheck` 与 `build` 会自动重新生成，也可单独执行：
-
-```powershell
-npm.cmd run generate:api
-```
+Vite 默认地址为 `http://127.0.0.1:5173`，开发代理会将 `/health`、`/api` 和 `/ws` 转发到后端 `8000` 端口。
 
 前端质量检查：
 
@@ -113,18 +121,14 @@ npm.cmd run build
 npm.cmd run e2e
 ```
 
-Playwright 使用与后端契约一致的浏览器级 Mock 覆盖桌面与移动端单聊流程；连接真实后端仍需要可用的 PostgreSQL、已注册项目和已启用 Agent。
-
 ## 基础设施
 
-Compose 提供 PostgreSQL + pgvector 开发服务。检查解析后的 Compose 配置不会启动容器：
+Compose 提供 PostgreSQL + pgvector 开发服务。检查解析后的 Compose 配置：
 
 ```powershell
 cd D:\codexWorkPlace\AgentHub
 docker compose --env-file .env.example -f infra\compose.yaml config --quiet
 ```
-
-Compose 静态检查不代表数据库已可用；后端数据库测试和迁移需要实际运行的 PostgreSQL。
 
 ## 目录
 
@@ -135,4 +139,4 @@ infra/     本地开发基础设施配置
 docs/      架构、API 与验收记录
 ```
 
-阶段范围、公共契约和后续顺序以 `AGENTS.md` 与 `DEVELOPMENT_PLAN.md` 为准。
+阶段范围、公共契约和后续顺序以 `AGENTS.md` 和 `DEVELOPMENT_PLAN.md` 为准。

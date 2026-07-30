@@ -18,10 +18,15 @@ import {
   cancelExecution,
   createConversation,
   deleteConversation,
+  isGroupConversation,
+  listAgents,
   listConversations,
   listMessages,
   submitMessage,
+  submissionExecutions,
   workspaceConfig,
+  type Agent,
+  type ChatProvider,
   type Conversation,
   type ExecutionStatus,
   type Message,
@@ -34,10 +39,16 @@ import { useConversationEvents } from '../hooks/use-conversation-events'
 interface StreamMessage {
   conversationId: string
   executionId: string
+  agentId: string
+  agentName: string
   content: string
   status: ExecutionStatus
   error?: string
 }
+
+const providerOptions: readonly { value: ChatProvider; label: string; detail: string }[] = [
+  { value: 'deepseek', label: 'DeepSeek', detail: '模型 API' },
+]
 
 function statusLabel(status: ExecutionStatus) {
   const labels: Record<ExecutionStatus, string> = {
@@ -56,7 +67,7 @@ export function WorkbenchPage() {
   const [newConversationOpen, setNewConversationOpen] = useState(false)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [selectedAgentId, setSelectedAgentId] = useState(workspaceConfig.agentId)
+  const [selectedProvider, setSelectedProvider] = useState<ChatProvider>('deepseek')
   const [streams, setStreams] = useState<Record<string, StreamMessage>>({})
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
@@ -65,6 +76,11 @@ export function WorkbenchPage() {
   const conversations = useQuery({
     queryKey: ['conversations', workspaceConfig.projectId],
     queryFn: ({ signal }) => listConversations(signal),
+  })
+
+  const agents = useQuery({
+    queryKey: ['agents', workspaceConfig.projectId],
+    queryFn: ({ signal }) => listAgents(signal),
   })
 
   const selectedConversationId = activeConversationId ?? conversations.data?.[0]?.id ?? null
@@ -83,26 +99,37 @@ export function WorkbenchPage() {
   )
 
   const knownAgents = useMemo(() => {
-    const agents = new Map<string, { id: string; name: string }>()
+    if (Array.isArray(agents.data)) return agents.data
+    const inferred = new Map<string, Agent>()
     conversations.data?.forEach((conversation) => {
-      if (conversation.agent_id !== null) {
-        agents.set(conversation.agent_id, {
+      if (!isGroupConversation(conversation) && conversation.agent_id !== null) {
+        inferred.set(conversation.agent_id, {
           id: conversation.agent_id,
-          name: conversation.agent_name ?? 'DeepSeek',
+          project_id: conversation.project_id,
+          name: conversation.agent_name ?? 'Agent',
+          agent_type: conversation.agent_type ?? 'mock',
+          capabilities: null,
+          status: 'enabled',
+          adapter_config_ref: null,
+          created_at: conversation.created_at,
+          updated_at: conversation.updated_at,
         })
       }
     })
-    if (!agents.has(workspaceConfig.agentId)) {
-      agents.set(workspaceConfig.agentId, { id: workspaceConfig.agentId, name: 'DeepSeek' })
-    }
-    return [...agents.values()]
-  }, [conversations.data])
+    return [...inferred.values()]
+  }, [agents.data, conversations.data])
+  const agentsById = useMemo(
+    () => new Map(knownAgents.map((agent) => [agent.id, agent])),
+    [knownAgents],
+  )
 
   function handleRealtimeEvent(event: RealtimeEvent) {
     setStreams((current) => {
       const existing = current[event.execution_id] ?? {
         conversationId: event.conversation_id,
         executionId: event.execution_id,
+        agentId: '',
+        agentName: 'Agent',
         content: '',
         status: 'pending' as const,
       }
@@ -137,7 +164,7 @@ export function WorkbenchPage() {
   )
 
   const createMutation = useMutation({
-    mutationFn: () => createConversation(selectedAgentId),
+    mutationFn: () => createConversation(selectedProvider),
     onSuccess: (conversation) => {
       queryClient.setQueryData(
         ['conversations', workspaceConfig.projectId],
@@ -165,22 +192,29 @@ export function WorkbenchPage() {
       return submitMessage(conversationId, content)
     },
     onSuccess: (submission, variables) => {
+      const executions = submissionExecutions(submission)
       if (selectedConversationId === variables.conversationId) {
-        followExecution(submission.execution.id)
+        executions.forEach((execution) => { followExecution(execution.id) })
       }
       queryClient.setQueryData<Message[]>(['messages', variables.conversationId], (current = []) => {
         if (current.some((message) => message.id === submission.message.id)) return current
         return [...current, submission.message]
       })
-      setStreams((current) => ({
-        ...current,
-        [submission.execution.id]: {
-          conversationId: variables.conversationId,
-          executionId: submission.execution.id,
-          content: current[submission.execution.id]?.content ?? '',
-          status: current[submission.execution.id]?.status ?? submission.execution.status,
-        },
-      }))
+      setStreams((current) => {
+        const next = { ...current }
+        executions.forEach((execution) => {
+          const agent = agentsById.get(execution.agent_id)
+          next[execution.id] = {
+            conversationId: variables.conversationId,
+            executionId: execution.id,
+            agentId: execution.agent_id,
+            agentName: agent?.name ?? 'Agent',
+            content: current[execution.id]?.content ?? '',
+            status: current[execution.id]?.status ?? execution.status,
+          }
+        })
+        return next
+      })
       void queryClient.invalidateQueries({ queryKey: ['conversations', workspaceConfig.projectId] })
       setFailedDraft(null)
     },
@@ -205,12 +239,29 @@ export function WorkbenchPage() {
     if (stream.conversationId !== selectedConversationId) return false
     if (stream.status !== 'succeeded') return true
     return !messages.data?.some(
-      (message) => message.role === 'agent' && message.content === stream.content,
+      (message) =>
+        message.role === 'agent' &&
+        message.agent_id === stream.agentId &&
+        message.content === stream.content,
     )
   })
   const cancellableExecution = visibleStreams.find(
     (stream) => stream.status === 'pending' || stream.status === 'running',
   )
+
+  const mentionSuggestions = useMemo(() => {
+    if (activeConversation === undefined || !isGroupConversation(activeConversation)) return []
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(draft)
+    if (match === null) return []
+    const query = (match[1] ?? '').toLocaleLowerCase()
+    return activeConversation.participants.filter(
+      (agent) => agent.status === 'enabled' && agent.name.toLocaleLowerCase().startsWith(query),
+    )
+  }, [activeConversation, draft])
+
+  function insertMention(name: string) {
+    setDraft((current) => current.replace(/(?:^|\s)@[^\s@]*$/, (token) => `${token.startsWith(' ') ? ' ' : ''}@${name} `))
+  }
 
   const updateScrollToBottomVisibility = useCallback(() => {
     const list = messageListRef.current
@@ -260,8 +311,8 @@ export function WorkbenchPage() {
           <form className="new-conversation-form" onSubmit={(event) => { event.preventDefault(); createMutation.mutate() }}>
             <div className="form-heading"><strong>新建会话</strong><button className="icon-button" type="button" aria-label="关闭新建会话" onClick={() => { setNewConversationOpen(false); }}><X aria-hidden="true" size={16} /></button></div>
             <p className="new-conversation-note">新会话初始名称为“新对话”，发送第一条消息后会自动生成短标题。</p>
-            <label>Agent<select aria-label="选择 Agent" value={selectedAgentId} onChange={(event) => { setSelectedAgentId(event.target.value); }}>{knownAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></label>
-            {createMutation.isError ? <p className="inline-error" role="alert">创建失败，请检查项目和 Agent 配置。</p> : null}
+            <fieldset className="provider-picker"><legend>运行提供方</legend>{providerOptions.map((provider) => <label key={provider.value} className='is-selected'><input type="radio" name="provider" value={provider.value} checked onChange={() => { setSelectedProvider(provider.value) }} /><span><strong>{provider.label}</strong><small>{provider.detail}</small></span></label>)}</fieldset>
+            {createMutation.isError ? <p className="inline-error" role="alert">创建失败，请检查提供方和本地运行环境。</p> : null}
             <button className="primary-button" type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? '创建中' : '创建'}</button>
           </form>
         ) : null}
@@ -282,13 +333,13 @@ export function WorkbenchPage() {
             </div>
           ))}
         </nav>
-        <footer className="sidebar-footer"><ConnectionStatus state={connection} /><span>Phase 5</span></footer>
+        <footer className="sidebar-footer"><ConnectionStatus state={connection} /><span>Phase 6</span></footer>
       </aside>
 
       <main className="workspace-main">
         <header className="workspace-toolbar">
-          <div><span className="toolbar-context">单聊工作区</span><h1>{activeConversation?.title ?? (activeConversation ? '新对话' : '选择会话')}</h1></div>
-          {activeConversation ? <span className="agent-badge">{activeConversation.agent_name ?? 'DeepSeek'}</span> : null}
+          <div><span className="toolbar-context">{activeConversation && isGroupConversation(activeConversation) ? '群聊工作区' : '单聊工作区'}</span><h1>{activeConversation?.title ?? (activeConversation ? '新对话' : '选择会话')}</h1></div>
+          {activeConversation ? <span className="agent-badge">{isGroupConversation(activeConversation) ? activeConversation.participants.map((agent) => agent.name).join(' · ') : activeConversation.agent_name ?? 'Agent'}</span> : null}
         </header>
 
         {selectedConversationId === null ? (
@@ -305,10 +356,10 @@ export function WorkbenchPage() {
               {messages.isPending ? <div className="center-state" role="status">正在加载消息…</div> : null}
               {messages.isError ? <div className="center-state" role="alert"><span>消息加载失败</span><button className="secondary-button" type="button" onClick={() => void messages.refetch()}><RefreshCw aria-hidden="true" size={15} />重试</button></div> : null}
               {messages.data?.length === 0 && visibleStreams.length === 0 ? <div className="center-state"><MessageSquare aria-hidden="true" size={22} /><span>发送第一条消息开始协作</span></div> : null}
-              {messages.data?.map((message) => <MessageRow key={message.id} message={message} />)}
+              {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} />)}
               {visibleStreams.map((stream) => (
                 <article key={`execution-${stream.executionId}`} className="message-row message-row--agent message-row--streaming" data-status={stream.status}>
-                  <header><Bot aria-hidden="true" size={15} /><strong>Agent</strong><span>{statusLabel(stream.status)}</span></header>
+                  <header><Bot aria-hidden="true" size={15} /><strong>{stream.agentName}</strong><span>{statusLabel(stream.status)}</span></header>
                   {stream.content ? <MarkdownContent content={stream.content} /> : <p className="stream-placeholder">等待内容…</p>}
                   {stream.error ? <p className="inline-error" role="alert">{stream.error}</p> : null}
                 </article>
@@ -323,9 +374,12 @@ export function WorkbenchPage() {
             <form className="composer" onSubmit={(event) => { event.preventDefault(); sendCurrentDraft() }}>
               {sendMutation.isError ? <div className="composer-error" role="alert"><span>消息发送失败。</span><button type="button" onClick={() => { if (failedDraft !== null) sendMutation.mutate({ conversationId: selectedConversationId, content: failedDraft }); }}><RefreshCw aria-hidden="true" size={14} />重试</button></div> : null}
               <label className="sr-only" htmlFor="message-input">输入消息</label>
-              <textarea id="message-input" value={draft} rows={3} placeholder="输入消息，Enter 发送，Shift + Enter 换行" onChange={(event) => { setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendCurrentDraft(); } }} />
+              <div className="composer-input-wrap">
+                <textarea id="message-input" value={draft} rows={3} placeholder={activeConversation && isGroupConversation(activeConversation) ? '输入 @ 点名参与 Agent' : '输入消息，Enter 发送，Shift + Enter 换行'} onChange={(event) => { setDraft(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter' && mentionSuggestions.length > 0) { event.preventDefault(); const first = mentionSuggestions[0]; if (first) insertMention(first.name); return } if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendCurrentDraft() } }} />
+                {mentionSuggestions.length > 0 ? <div className="mention-suggestions" role="listbox" aria-label="@Agent 建议">{mentionSuggestions.map((agent) => <button type="button" role="option" aria-selected="false" key={agent.id} onMouseDown={(event) => { event.preventDefault(); insertMention(agent.name) }}><Bot aria-hidden="true" size={14} /><span>{agent.name}</span><small>{agent.agent_type}</small></button>)}</div> : null}
+              </div>
               <div className="composer-toolbar">
-                <label className="agent-select"><span>Agent</span><select aria-label="当前 Agent" value={activeConversation?.agent_id ?? selectedAgentId} disabled><option value={activeConversation?.agent_id ?? selectedAgentId}>{activeConversation?.agent_name ?? 'DeepSeek'}</option></select></label>
+                <div className="agent-select"><Bot aria-hidden="true" size={14} /><span>{activeConversation && isGroupConversation(activeConversation) ? `${String(activeConversation.participants.length)} 位参与者` : activeConversation?.agent_name ?? 'Agent'}</span></div>
                 <div className="composer-actions">
                   {cancellableExecution ? <button className="secondary-button" type="button" disabled={cancelMutation.isPending} onClick={() => { cancelMutation.mutate(cancellableExecution.executionId); }}><CircleStop aria-hidden="true" size={16} />取消</button> : null}
                   <button className="send-button" type="submit" aria-label="发送消息" title="发送消息" disabled={draft.trim() === '' || sendMutation.isPending}><Send aria-hidden="true" size={17} /></button>
@@ -339,10 +393,10 @@ export function WorkbenchPage() {
   )
 }
 
-function MessageRow({ message }: { message: Message }) {
+function MessageRow({ message, agentName }: { message: Message; agentName?: string }) {
   return (
     <article className={`message-row message-row--${message.role}`}>
-      <header><strong>{message.role === 'user' ? '你' : message.role === 'agent' ? 'Agent' : '系统'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></header>
+      <header><strong>{message.role === 'user' ? '你' : message.role === 'agent' ? agentName ?? 'Agent' : '系统'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></header>
       <MarkdownContent content={message.content} />
     </article>
   )

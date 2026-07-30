@@ -1,4 +1,4 @@
-# AgentHub 项目执行规范
+﻿# AgentHub 项目执行规范
 
 ## 1. 文档作用域
 
@@ -6,18 +6,21 @@
 
 ## 2. 产品定位与首版边界
 
-AgentHub 是聊天式多 Agent 软件交付工作台，不是多个聊天窗口的简单集合。首版核心闭环为：
+AgentHub 是以群聊写代码为核心的多 Agent 软件交付工作台。首版核心闭环为：
 
-`会话 -> @Agent 路由 -> Agent 执行 -> Diff 审核 -> 网页预览 -> Vercel 部署`
+`群聊 -> 需求输入 -> Orchestrator 拆解 -> 子Agent并行/串行执行 -> Diff审核 -> 网页预览 -> Vercel部署`
 
 首版固定边界：
 
 - 面向本地单用户，不实现账号体系、组织、多租户和计费。
-- Agent 接入实现确定性的 Mock Adapter 和真实 Codex CLI Adapter。
-- Orchestrator 通过 OpenAI 兼容接口执行计划生成和结果汇总。
-- PostgreSQL 同时保存业务数据，并通过 pg_trgm 支持模糊搜索。
-- 支持本地网页预览和 Vercel 部署，不实现 Netlify 或云端 Agent 执行节点。
-- 高风险动作必须由用户明确批准，不允许以“自动化体验”为由绕过确认。
+- 单聊仅保留 DeepSeek（通过 OpenAI 兼容接口）。移除 Claude Code 和 Codex CLI Adapter 作为可选提供方。
+- 群聊预置 6 个代码垂直子 Agent：需求分析专家、架构设计专家、代码生成专家、代码审查专家、测试专家、技术报告撰写专家。
+- Agent 接入实现确定性的 Mock Adapter 和真实 DeepSeek Adapter。
+- Orchestrator 通过 LangGraph + OpenAI 兼容接口实现群聊隐式消息的任务拆解、子 Agent 调度和结果汇总。
+- PostgreSQL + pgvector 同时保存业务数据和向量嵌入，支撑 RAG 知识库和会话记忆。
+- pg_trgm 支持模糊搜索。
+- 支持本地网页预览和 Vercel 部署。
+- 高风险动作必须由用户明确批准，不允许以"自动化体验"为由绕过确认。
 
 不得在未修改需求基线的情况下把后续设想提前加入首版。
 
@@ -28,7 +31,7 @@ AgentHub 是聊天式多 Agent 软件交付工作台，不是多个聊天窗口�
 - Python 3.13
 - FastAPI、Pydantic v2
 - SQLAlchemy 2 async、asyncpg、Alembic
-- PostgreSQL、pg_trgm
+- PostgreSQL、pgvector、pg_trgm
 - LangGraph
 - WebSocket
 - pytest、pytest-asyncio、httpx、mypy 或 pyright、Ruff
@@ -59,7 +62,8 @@ AgentHub/
 |   |-- alembic/
 |   |-- prompts/
 |   |   |-- orchestrator/
-|   |   `-- adapters/
+|   |   |-- adapters/
+|   |   `-- agents/          # 各子Agent的System Prompt
 |   |-- src/agenthub/
 |   |   |-- api/
 |   |   |-- core/
@@ -70,6 +74,7 @@ AgentHub/
 |   |   |-- services/
 |   |   |-- adapters/
 |   |   |-- orchestrator/
+|   |   |-- rag/              # RAG 知识库与会话记忆
 |   |   `-- main.py
 |   `-- tests/
 |-- frontend/
@@ -98,15 +103,17 @@ AgentHub/
 ## 5. 核心业务对象
 
 - `Project`：已注册本地项目及其受信任根目录，是工作区和安全隔离边界。
-- `Agent`：Agent 注册信息、平台类型、能力、启停状态和适配器配置引用。
+- `Agent`：Agent 注册信息、平台类型、能力、启停状态和适配器配置引用。预置 6 个代码子 Agent（需求分析、架构设计、代码生成、代码审查、测试、技术报告撰写）。
 - `Conversation`：项目内单聊或群聊会话。
 - `Message`：用户、Agent 或系统消息，保存稳定顺序和内容类型。
 - `AgentExecution`：一次 Adapter 执行，记录状态、序号、取消信息和错误。
 - `Task`、`TaskDependency`：Orchestrator 子任务与依赖关系。
-- `Artifact`：Agent 产生的文件、Diff、预览包、报告或部署描述。
+- `Artifact`：Agent 产生的代码 Diff、预览包、报告或部署描述。
 - `Deployment`：部署请求、审批、状态、目标和结果 URL。
 - `UsageEvent`：调用次数、Token、耗时、结果与 Agent 维度的原始统计事件。
 - `Approval`：高风险操作的持久化确认记录，必须可在页面刷新后恢复。
+- `Memory`：会话记忆摘要，向量化后存入 pgvector，支撑跨时间对话连贯性。
+- `KnowledgeDocument`：RAG 知识文档分块，包含向量嵌入和元数据。
 
 API Schema、领域对象和 ORM 模型职责分离。仓储层不得把 SQLAlchemy ORM 实例直接返回给路由层。
 
@@ -116,7 +123,7 @@ API Schema、领域对象和 ORM 模型职责分离。仓储层不得把 SQLAlch
 
 普通消息链路负责确定性步骤：保存消息、解析显式 `@Agent`、调用 Adapter、持久化事件和推送 WebSocket。显式点名多个 Agent 时只做并行分发，不进行隐式任务拆解。
 
-Orchestrator 仅处理复杂任务：生成结构化计划、校验依赖图、能力匹配、调度串行或并行任务、执行条件分支、重试和汇总。Orchestrator 的 LLM 输出是不可信输入，必须经过 Pydantic 校验和策略检查后才能执行。
+Orchestrator 仅处理群聊中**无显式 @Agent** 的复杂任务：通过 LangGraph 管理意图分析 → 计划生成 → 能力匹配 → 并行调度 → 结果汇总的状态机。Orchestrator 在执行前通过 RAG 检索项目上下文，通过记忆模块检索相关历史摘要。LLM 输出是不可信输入，必须经过 Pydantic 校验和策略检查后才能执行。
 
 ### 6.2 Adapter 契约
 
@@ -140,6 +147,10 @@ class AgentAdapter(Protocol):
 - 产物 `artifact.created`
 
 Adapter 负责平台协议转换，不负责业务路由、审批或数据库事务。平台错误必须映射为稳定错误码，不得把包含凭据、绝对隐私路径或完整 stderr 的内容直接发送给前端。
+
+首版仅保留两个 Adapter 实现：
+- `MockAdapter`：确定性脚本控制，用于自动化测试。
+- `OpenAICompatibleAdapter`（DeepSeek）：单聊和所有 6 个子 Agent 均使用此 Adapter，通过不同的 System Prompt 区分能力。
 
 ### 6.3 REST 与 WebSocket 契约
 
@@ -167,30 +178,41 @@ WebSocket 事件信封：
 
 ### 6.4 Artifact 与审批
 
-任何 Agent 输出文件、补丁、预览包或部署结果都必须登记为 Artifact，至少记录项目、执行、类型、相对路径、内容哈希、大小、创建时间和元数据。
+Agent 输出代码 Diff 必须登记为 Artifact，至少记录项目、执行、类型（`DIFF`）、内容哈希、大小、创建时间和元数据。
 
 以下动作必须先产生 `approval.required` 事件和持久化审批记录，获得批准后再执行，并产生 `approval.resolved`：
 
-- 写入目标项目或应用 Diff
-- 执行可能改变工作区的命令
+- 应用代码 Diff 到目标项目
 - 启动本地预览进程
 - 发起 Vercel 部署
 
 审批必须绑定动作摘要和内容哈希，批准后动作发生变化则原批准失效。
 
-### 6.5 工作区与 Git
+### 6.5 工作区与 Git（简化）
 
-可写任务只允许作用于已注册且验证通过的 Git 项目。每次执行在 `<project>/.agenthub/worktrees/<execution_id>` 创建隔离 worktree，Agent 只能在该目录工作。
+Phase 7 起实现 Code Diff 功能。首版不要求隔离 worktree，Agent 直接在项目根目录操作。对所有输入路径执行规范化和根目录包含检查，拒绝路径逃逸。
 
-- 对所有输入路径执行规范化和根目录包含检查。
-- 拒绝路径逃逸、符号链接越界和未注册目录。
 - 子进程使用参数数组启动，禁止 `shell=True`。
-- 子进程 `cwd` 必须是当前执行的已验证 worktree。
-- 取消、失败和完成后执行可观测的资源清理；清理失败要记录可操作错误，但不得删除用户目标分支。
+- 取消、失败和完成后执行可观测的资源清理。
 
-### 6.6 Prompt 管理
+### 6.6 RAG 与会话记忆
 
-Orchestrator 计划 Prompt 和 Adapter 任务模板保存在 `backend/prompts/` 下的版本化文件中，由运行时代码加载。文档只描述 Prompt 的目标与约束，不再维护一份会与实际代码漂移的完整运行时 Prompt。
+RAG 知识库为 Orchestrator 和子 Agent 提供项目代码和文档的上下文检索：
+
+- 文档摄入：代码按函数/类边界分块，文档按段落/标题分块。
+- 向量存储：pgvector，嵌入模型通过 OpenAI 兼容 API。
+- 混合检索：pg_trgm 关键词 + pgvector 向量相似度，限定 project_id。
+- 重排序：提升检索相关性。
+
+会话记忆确保跨时间的对话连贯性：
+
+- 短期记忆：当前会话完整消息历史（已有）。
+- 长期记忆：LLM 生成会话摘要 → 向量化存入 pgvector。
+- 记忆检索：新消息到达时自动检索相关历史摘要，注入上下文窗口。
+
+### 6.7 Prompt 管理
+
+Orchestrator 计划 Prompt、子 Agent System Prompt 和 Adapter 任务模板保存在 `backend/prompts/` 下的版本化文件中，由运行时代码加载。文档只描述 Prompt 的目标与约束，不再维护一份会与实际代码漂移的完整运行时 Prompt。
 
 Prompt 变更必须有版本标识、输入输出 Schema 说明和回归用例。不得记录或向模型注入密钥、Cookie、会话令牌及不必要的环境变量。
 
@@ -201,7 +223,7 @@ Prompt 变更必须有版本标识、输入输出 Schema 说明和回归用例�
 3. 只实现当前阶段，不提前实现依赖尚未验收的后续能力。
 4. 每个可观察行为优先建立失败测试或契约测试，再完成最小实现。
 5. 当前阶段所有必需验收通过后，记录命令和结果，才可进入下一阶段。
-6. 若环境不具备某项集成条件，执行可行的静态或 Mock 验证，明确标记未执行项；不得把“未运行”写成“已通过”。
+6. 若环境不具备某项集成条件，执行可行的静态或 Mock 验证，明确标记未执行项；不得把"未运行"写成"已通过"。
 7. Phase 验收完成后进行一次知识复盘，只筛选实际遇到且可复用的问题，以及与本阶段实现直接相关的面试知识点。
 8. 复盘有高价值内容时随阶段完成报告发给用户；没有符合条件的内容时省略整个复盘部分，不输出空标题、占位语或泛化知识清单。
 
@@ -281,7 +303,8 @@ Prompt 变更必须有版本标识、输入输出 Schema 说明和回归用例�
 - 仓储和迁移：真实 PostgreSQL 集成测试。
 - API、WebSocket、Adapter：契约和集成测试。
 - 聊天、审批、Diff、预览、部署：Playwright 端到端测试。
-- Codex CLI 与 Vercel：默认 Mock 保证确定性，发布前另做具备条件的真实冒烟测试。
+- DeepSeek 集成：默认 Mock 保证确定性，发布前另做具备条件的真实冒烟测试。
+- RAG 检索：向量相似度 + 关键词混合搜索的集成测试。
 
 测试必须验证成功路径、失败路径、取消、超时、重试、项目隔离和敏感信息不泄漏。不得只断言 HTTP 状态码而忽略持久化状态和事件顺序。
 
@@ -318,19 +341,21 @@ npm.cmd run build
 npm.cmd run e2e
 ```
 
-若实际脚本名在阶段 1 中确定为其他名称，应同步更新本文件和 README，保持命令可复制执行。
+若实际脚本名在阶段中确定为其他名称，应同步更新本文件和 README，保持命令可复制执行。
 
 ## 12. 当前开发环境事实
 
-截至 2026-07-28 已核对：
+截至 2026-07-30 已核对：
 
 - Python 3.13.7 可用。
 - uv 0.11.8 可用。
 - Node.js v24.16.0 可用。
 - PowerShell 执行策略会阻止 `npm.ps1`，使用 `npm.cmd`。
-- Docker CLI 与守护进程可用，版本为 29.6.2；Phase 1 仅完成 Compose 静态解析，没有启动容器或验证数据库运行。
+- Docker CLI 与守护进程可用，版本为 29.6.2。
 - psql 当前不在 PATH，数据库命令行集成尚未验证。
-- 可发现 `codex.exe`，但直接执行当前返回 Access is denied。Codex CLI Adapter 必须先运行显式健康检查；不可用时给出清晰原因，Mock Adapter 测试继续运行。
+- DeepSeek API 通过 OpenAI 兼容接口调用，是唯一的生产 Agent 提供方。
+- Claude Code CLI 和 Codex CLI Adapter 已移除作为可选提供方，相关代码保留在仓库中但不再向前端暴露。
+- pgvector 扩展已在 Compose 配置中启用，用于 RAG 知识库和会话记忆（Phase 8）。
 
 这些事实可能随环境变化。每个阶段开始时重新探测其依赖，并记录本次实际结果。
 

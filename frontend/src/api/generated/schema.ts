@@ -46,6 +46,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agents
+         * @description 列出项目 Agent。
+         */
+        get: operations["list_agents_api_v1_projects__project_id__agents_get"];
+        put?: never;
+        /**
+         * Create Agent
+         * @description 注册项目 Agent。
+         */
+        post: operations["create_agent_api_v1_projects__project_id__agents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/agents/{agent_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent
+         * @description 读取项目 Agent。
+         */
+        get: operations["get_agent_api_v1_projects__project_id__agents__agent_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Agent
+         * @description 更新 Agent 能力、名称或启停状态。
+         */
+        patch: operations["update_agent_api_v1_projects__project_id__agents__agent_id__patch"];
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/conversations": {
         parameters: {
             query?: never;
@@ -61,7 +109,7 @@ export interface paths {
         put?: never;
         /**
          * Create Conversation
-         * @description 创建绑定一个已启用 Agent 的单聊会话。
+         * @description 创建单聊或群聊会话。
          */
         post: operations["create_conversation_api_v1_projects__project_id__conversations_post"];
         delete?: never;
@@ -143,6 +191,33 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AgentCapability
+         * @description Agent 能力声明，用于 Orchestrator 能力匹配。
+         *
+         *     与 6 个预置子 Agent 一一对应：
+         *     - requirement_analysis：需求分析专家
+         *     - architecture_design：架构设计专家
+         *     - code_generation：代码生成专家
+         *     - code_review：代码审查专家
+         *     - testing：测试专家
+         *     - documentation：技术报告撰写专家
+         * @enum {string}
+         */
+        AgentCapability: "requirement_analysis" | "architecture_design" | "code_generation" | "code_review" | "testing" | "documentation" | "file_operation" | "deployment";
+        /**
+         * AgentCreate
+         * @description 创建 Agent 请求。
+         */
+        AgentCreate: {
+            /** Name */
+            name: string;
+            agent_type: components["schemas"]["AgentType"];
+            /** Capabilities */
+            capabilities?: components["schemas"]["AgentCapability"][] | null;
+            /** Adapter Config Ref */
+            adapter_config_ref?: string | null;
+        };
+        /**
          * AgentExecutionResponse
          * @description 执行记录响应。
          */
@@ -190,11 +265,67 @@ export interface components {
             created_at: string;
         };
         /**
-         * AgentType
-         * @description Agent 平台类型——决定调用哪个 Adapter。
+         * AgentResponse
+         * @description Agent 响应。
+         */
+        AgentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Name */
+            name: string;
+            agent_type: components["schemas"]["AgentType"];
+            /** Capabilities */
+            capabilities: string[] | null;
+            status: components["schemas"]["AgentStatus"];
+            /** Adapter Config Ref */
+            adapter_config_ref: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AgentStatus
+         * @description Agent 启用/停用状态。
          * @enum {string}
          */
-        AgentType: "mock" | "codex_cli" | "openai_compatible";
+        AgentStatus: "enabled" | "disabled";
+        /**
+         * AgentType
+         * @description Agent 平台类型——决定调用哪个 Adapter。
+         *
+         *     CODEX_CLI 和 CLAUDE_CODE 已废弃，保留以兼容已有数据库记录。
+         *     新 Agent 注册应仅使用 MOCK 或 OPENAI_COMPATIBLE。
+         * @enum {string}
+         */
+        AgentType: "mock" | "openai_compatible" | "codex_cli" | "claude_code";
+        /**
+         * AgentUpdate
+         * @description 更新 Agent 请求。
+         */
+        AgentUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Capabilities */
+            capabilities?: components["schemas"]["AgentCapability"][] | null;
+            status?: components["schemas"]["AgentStatus"] | null;
+            /** Adapter Config Ref */
+            adapter_config_ref?: string | null;
+        };
         /**
          * ConversationCreate
          * @description 创建会话请求。
@@ -204,11 +335,29 @@ export interface components {
             title?: string | null;
             /** @default direct */
             conversation_type: components["schemas"]["ConversationType"];
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Provider */
+            provider?: "deepseek" | null;
+            /** Participant Agent Ids */
+            participant_agent_ids?: string[] | null;
+        };
+        /**
+         * ConversationParticipantResponse
+         * @description 群聊参与 Agent 的公开展示信息。
+         */
+        ConversationParticipantResponse: {
             /**
-             * Agent Id
+             * Id
              * Format: uuid
              */
-            agent_id: string;
+            id: string;
+            /** Name */
+            name: string;
+            agent_type: components["schemas"]["AgentType"];
+            /** Capabilities */
+            capabilities: string[] | null;
+            status: components["schemas"]["AgentStatus"];
         };
         /**
          * ConversationResponse
@@ -232,7 +381,11 @@ export interface components {
             agent_type?: components["schemas"]["AgentType"] | null;
             /** Title */
             title: string | null;
-            conversation_type: components["schemas"]["ConversationType"];
+            /**
+             * Conversation Type
+             * @constant
+             */
+            conversation_type: "direct";
             /**
              * Created At
              * Format: date-time
@@ -245,6 +398,12 @@ export interface components {
             updated_at: string;
         };
         /**
+         * ConversationStatus
+         * @description 会话最近一次消息批次的聚合状态。
+         * @enum {string}
+         */
+        ConversationStatus: "idle" | "running" | "succeeded" | "partial_failed" | "failed" | "cancelled";
+        /**
          * ConversationType
          * @description 会话类型：一对一私聊或群聊。
          * @enum {string}
@@ -256,6 +415,53 @@ export interface components {
          * @enum {string}
          */
         ExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * GroupConversationResponse
+         * @description 群聊响应独立于既有单聊响应，避免改变 Phase 5 契约。
+         */
+        GroupConversationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Agent Id */
+            agent_id?: null;
+            /** Title */
+            title: string | null;
+            /**
+             * Conversation Type
+             * @constant
+             */
+            conversation_type: "group";
+            status: components["schemas"]["ConversationStatus"];
+            /** Participants */
+            participants: components["schemas"]["ConversationParticipantResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * GroupMessageSubmissionResponse
+         * @description 群聊一次显式路由产生一个用户消息和多个独立执行。
+         */
+        GroupMessageSubmissionResponse: {
+            message: components["schemas"]["MessageResponse"];
+            /** Executions */
+            executions: components["schemas"]["AgentExecutionResponse"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -729,6 +935,140 @@ export interface operations {
             };
         };
     };
+    list_agents_api_v1_projects__project_id__agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_api_v1_projects__project_id__agents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_api_v1_projects__project_id__agents__agent_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agent_api_v1_projects__project_id__agents__agent_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_conversations_api_v1_projects__project_id__conversations_get: {
         parameters: {
             query?: never;
@@ -746,7 +1086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConversationResponse"][];
+                    "application/json": (components["schemas"]["ConversationResponse"] | components["schemas"]["GroupConversationResponse"])[];
                 };
             };
             /** @description Validation Error */
@@ -781,7 +1121,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConversationResponse"];
+                    "application/json": components["schemas"]["ConversationResponse"] | components["schemas"]["GroupConversationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -813,7 +1153,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConversationResponse"];
+                    "application/json": components["schemas"]["ConversationResponse"] | components["schemas"]["GroupConversationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -911,7 +1251,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageSubmissionResponse"];
+                    "application/json": components["schemas"]["MessageSubmissionResponse"] | components["schemas"]["GroupMessageSubmissionResponse"];
                 };
             };
             /** @description Validation Error */

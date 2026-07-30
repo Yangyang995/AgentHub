@@ -1,4 +1,4 @@
-"""AgentHub 业务枚举定义。
+﻿"""AgentHub 业务枚举定义。
 
 所有枚举值使用 VARCHAR 存储（配合 CHECK 约束），而非 PostgreSQL 原生 ENUM 类型，
 以便后续通过 ALTER TABLE 安全地新增枚举值而不触发类型重建。
@@ -8,22 +8,40 @@ import enum
 
 
 class AgentType(enum.StrEnum):
-    """Agent 平台类型——决定调用哪个 Adapter。"""
+    """Agent 平台类型——决定调用哪个 Adapter。
+
+    CODEX_CLI 和 CLAUDE_CODE 已废弃，保留以兼容已有数据库记录。
+    新 Agent 注册应仅使用 MOCK 或 OPENAI_COMPATIBLE。
+    """
 
     MOCK = "mock"
-    CODEX_CLI = "codex_cli"
     OPENAI_COMPATIBLE = "openai_compatible"
+    # 已废弃，不再接受新注册
+    CODEX_CLI = "codex_cli"
+    CLAUDE_CODE = "claude_code"
 
 
 class AgentCapability(enum.StrEnum):
-    """Agent 能力声明，用于 Orchestrator 能力匹配。"""
+    """Agent 能力声明，用于 Orchestrator 能力匹配。
 
+    与 6 个预置子 Agent 一一对应：
+    - requirement_analysis：需求分析专家
+    - architecture_design：架构设计专家
+    - code_generation：代码生成专家
+    - code_review：代码审查专家
+    - testing：测试专家
+    - documentation：技术报告撰写专家
+    """
+
+    REQUIREMENT_ANALYSIS = "requirement_analysis"
+    ARCHITECTURE_DESIGN = "architecture_design"
     CODE_GENERATION = "code_generation"
     CODE_REVIEW = "code_review"
-    FILE_OPERATION = "file_operation"
-    DEPLOYMENT = "deployment"
     TESTING = "testing"
     DOCUMENTATION = "documentation"
+    # 以下为历史兼容，仍可用但不作为预置 Agent 的主能力
+    FILE_OPERATION = "file_operation"
+    DEPLOYMENT = "deployment"
 
 
 class AgentStatus(enum.StrEnum):
@@ -38,6 +56,17 @@ class ConversationType(enum.StrEnum):
 
     DIRECT = "direct"
     GROUP = "group"
+
+
+class ConversationStatus(enum.StrEnum):
+    """会话最近一次消息批次的聚合状态。"""
+
+    IDLE = "idle"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL_FAILED = "partial_failed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class MessageRole(enum.StrEnum):

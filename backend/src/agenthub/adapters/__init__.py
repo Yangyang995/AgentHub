@@ -1,11 +1,10 @@
-"""Agent Adapter 包——统一协议与具体实现。
+﻿"""Agent Adapter 包——统一协议与具体实现。
 
 导出公共类型与两个 Adapter 实现：
 - MockAdapter：确定性脚本控制
-- CodexCLIAdapter：安全子进程封装
+- OpenAICompatibleAdapter：DeepSeek 通过 OpenAI 兼容接口
 """
 
-from agenthub.adapters.codex_cli import CodexCLIAdapter
 from agenthub.adapters.mock_adapter import (
     MockAdapter,
     MockAdapterScript,
@@ -26,7 +25,7 @@ from agenthub.adapters.protocol import (
     ExecutionUsageEvent,
 )
 
-__all__ = [  # noqa: RUF022
+__all__ = [
     # 协议类型
     "AdapterErrorCode",
     "AdapterHealth",
@@ -43,8 +42,6 @@ __all__ = [  # noqa: RUF022
     "MockAdapter",
     "MockAdapterScript",
     "MockScriptStep",
-    # Codex CLI Adapter
-    "CodexCLIAdapter",
-    # OpenAI 兼容 HTTP Adapter
+    # OpenAI 兼容 HTTP Adapter（DeepSeek）
     "OpenAICompatibleAdapter",
 ]

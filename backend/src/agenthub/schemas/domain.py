@@ -6,7 +6,7 @@ API Schema（Pydantic）与 ORM 模型职责分离。
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +17,7 @@ from agenthub.models.enums import (
     ApprovalActionType,
     ApprovalStatus,
     ArtifactType,
+    ConversationStatus,
     ConversationType,
     DeploymentProvider,
     DeploymentStatus,
@@ -124,7 +125,9 @@ class ConversationCreate(BaseModel):
 
     title: str | None = Field(default=None, max_length=500)
     conversation_type: ConversationType = ConversationType.DIRECT
-    agent_id: uuid.UUID
+    agent_id: uuid.UUID | None = None
+    provider: Literal["deepseek"] | None = None
+    participant_agent_ids: list[uuid.UUID] | None = Field(default=None, min_length=2)
 
 
 class ConversationResponse(BaseModel):
@@ -138,7 +141,35 @@ class ConversationResponse(BaseModel):
     agent_name: str | None = None
     agent_type: AgentType | None = None
     title: str | None
-    conversation_type: ConversationType
+    conversation_type: Literal[ConversationType.DIRECT]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationParticipantResponse(BaseModel):
+    """群聊参与 Agent 的公开展示信息。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    agent_type: AgentType
+    capabilities: list[str] | None
+    status: AgentStatus
+
+
+class GroupConversationResponse(BaseModel):
+    """群聊响应独立于既有单聊响应，避免改变 Phase 5 契约。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    agent_id: None = None
+    title: str | None
+    conversation_type: Literal[ConversationType.GROUP]
+    status: ConversationStatus
+    participants: list[ConversationParticipantResponse]
     created_at: datetime
     updated_at: datetime
 
@@ -168,6 +199,13 @@ class MessageSubmissionResponse(BaseModel):
 
     message: "MessageResponse"
     execution: "AgentExecutionResponse"
+
+
+class GroupMessageSubmissionResponse(BaseModel):
+    """群聊一次显式路由产生一个用户消息和多个独立执行。"""
+
+    message: "MessageResponse"
+    executions: list["AgentExecutionResponse"] = Field(min_length=1)
 
 
 class EventEnvelope(BaseModel):

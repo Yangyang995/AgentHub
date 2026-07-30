@@ -18,6 +18,8 @@ from fastapi import (
 from agenthub.schemas.domain import (
     ConversationCreate,
     ConversationResponse,
+    GroupConversationResponse,
+    GroupMessageSubmissionResponse,
     MessageResponse,
     MessageSubmissionResponse,
     UserMessageCreate,
@@ -50,23 +52,23 @@ def _raise_http_error(error: Exception) -> Never:
 
 @router.post(
     "/conversations",
-    response_model=ConversationResponse,
+    response_model=ConversationResponse | GroupConversationResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_conversation(
     project_id: uuid.UUID, data: ConversationCreate, service: ChatServiceDependency
-) -> ConversationResponse:
-    """创建绑定一个已启用 Agent 的单聊会话。"""
+) -> ConversationResponse | GroupConversationResponse:
+    """创建单聊或群聊会话。"""
     try:
         return await service.create_conversation(project_id, data)
     except (ChatNotFoundError, ChatConflictError) as error:
         _raise_http_error(error)
 
 
-@router.get("/conversations", response_model=list[ConversationResponse])
+@router.get("/conversations", response_model=list[ConversationResponse | GroupConversationResponse])
 async def list_conversations(
     project_id: uuid.UUID, service: ChatServiceDependency
-) -> list[ConversationResponse]:
+) -> list[ConversationResponse | GroupConversationResponse]:
     """列出项目中的会话。"""
     try:
         return await service.list_conversations(project_id)
@@ -74,10 +76,13 @@ async def list_conversations(
         _raise_http_error(error)
 
 
-@router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
+@router.get(
+    "/conversations/{conversation_id}",
+    response_model=ConversationResponse | GroupConversationResponse,
+)
 async def get_conversation(
     project_id: uuid.UUID, conversation_id: uuid.UUID, service: ChatServiceDependency
-) -> ConversationResponse:
+) -> ConversationResponse | GroupConversationResponse:
     """读取项目内单个会话。"""
     try:
         return await service.get_conversation(project_id, conversation_id)
@@ -109,7 +114,7 @@ async def list_messages(
 
 @router.post(
     "/conversations/{conversation_id}/messages",
-    response_model=MessageSubmissionResponse,
+    response_model=MessageSubmissionResponse | GroupMessageSubmissionResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def submit_message(
@@ -118,13 +123,18 @@ async def submit_message(
     conversation_id: uuid.UUID,
     data: UserMessageCreate,
     service: ChatServiceDependency,
-) -> MessageSubmissionResponse:
+) -> MessageSubmissionResponse | GroupMessageSubmissionResponse:
     """原子保存消息和执行记录，然后在响应后独立消费 Adapter。"""
     try:
         response = await service.submit_message(project_id, conversation_id, data)
     except (ChatNotFoundError, ChatConflictError) as error:
         _raise_http_error(error)
-    task = asyncio.create_task(service.run_execution(response.execution.id))
+    if isinstance(response, MessageSubmissionResponse):
+        task = asyncio.create_task(service.run_execution(response.execution.id))
+    else:
+        task = asyncio.create_task(
+            service.run_executions([item.id for item in response.executions])
+        )
     tasks: set[asyncio.Task[None]] = request.app.state.execution_tasks
     tasks.add(task)
     task.add_done_callback(tasks.discard)
@@ -150,8 +160,9 @@ async def conversation_events(
     project_id: Annotated[uuid.UUID, Query()],
     execution_id: Annotated[uuid.UUID | None, Query()] = None,
     last_sequence: Annotated[int, Query(ge=-1)] = -1,
+    cursor: Annotated[list[str] | None, Query()] = None,
 ) -> None:
-    """推送实时事件，并按执行游标补发遗漏事件且在连接内按 event_id 去重。"""
+    """推送实时事件，并按一个或多个执行游标补发遗漏事件。"""
     service: ChatService = websocket.app.state.chat_service
     broker = websocket.app.state.event_broker
     queue = await broker.subscribe(conversation_id)
@@ -159,11 +170,23 @@ async def conversation_events(
     try:
         await service.get_conversation(project_id, conversation_id)
         await websocket.accept()
+        replay_cursors: list[tuple[uuid.UUID, int]] = []
         if execution_id is not None:
+            replay_cursors.append((execution_id, last_sequence))
+        for value in cursor or []:
+            try:
+                raw_execution_id, raw_sequence = value.rsplit(":", 1)
+                replay_cursors.append((uuid.UUID(raw_execution_id), int(raw_sequence)))
+            except (ValueError, TypeError):
+                await websocket.close(code=4400, reason="Invalid replay cursor")
+                return
+        for replay_execution_id, replay_sequence in replay_cursors:
             replay = await service.replay_events(
-                project_id, conversation_id, execution_id, last_sequence
+                project_id, conversation_id, replay_execution_id, replay_sequence
             )
             for event in replay:
+                if event.event_id in sent_event_ids:
+                    continue
                 await websocket.send_json(event.model_dump(mode="json"))
                 sent_event_ids.add(event.event_id)
         while True:

@@ -12,13 +12,20 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from agenthub.adapters import MockAdapter, MockAdapterScript, OpenAICompatibleAdapter
+from agenthub.adapters import (
+    MockAdapter,
+    MockAdapterScript,
+    MockScriptStep,
+    OpenAICompatibleAdapter,
+)
+from agenthub.api.routes.agents import router as agents_router
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.chat import websocket_router
 from agenthub.api.routes.health import router as health_router
 from agenthub.core.config import Settings, get_settings
 from agenthub.models.enums import AgentType
 from agenthub.models.orm import Agent
+from agenthub.services.agents import AgentService
 from agenthub.services.chat import AgentAdapter, ChatService
 from agenthub.services.realtime import ConversationEventBroker
 
@@ -28,7 +35,22 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
 
     def resolve(agent: Agent) -> AgentAdapter:
         if agent.agent_type == AgentType.MOCK:
-            return MockAdapter(MockAdapterScript())
+            # 应用默认注册的 Mock Agent 必须产生可见内容，便于验证完整聊天链路；
+            # 固定回复不回显用户输入，也不会让用户误以为它是真实模型输出。
+            return MockAdapter(
+                MockAdapterScript(
+                    adapter_name=agent.name,
+                    script=[
+                        MockScriptStep(
+                            action="delta",
+                            content=(
+                                "这是确定性 Mock Agent 回复，用于验证 AgentHub 的对话与并发链路。"
+                            ),
+                            content_type="markdown",
+                        )
+                    ],
+                )
+            )
         if agent.agent_type == AgentType.OPENAI_COMPATIBLE:
             dependencies = settings.runtime_dependencies()
             return OpenAICompatibleAdapter(
@@ -81,10 +103,12 @@ def create_app(
         owned_engine = create_async_engine(resolved_settings.database_url.get_secret_value())
         factory = async_sessionmaker(owned_engine, class_=AsyncSession, expire_on_commit=False)
     if factory is not None:
+        application.state.agent_service = AgentService(factory)
         application.state.chat_service = ChatService(
             factory, broker, adapter_resolver or _default_adapter_resolver(resolved_settings)
         )
     application.include_router(health_router)
+    application.include_router(agents_router)
     application.include_router(chat_router)
     application.include_router(websocket_router)
 

@@ -4,17 +4,12 @@ import { buildWebSocketUrl, type RealtimeEvent } from '../api/chat'
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 
-interface Cursor {
-  executionId?: string
-  sequence: number
-}
-
 export function useConversationEvents(
   conversationId: string | null,
   onEvent: (event: RealtimeEvent) => void,
 ) {
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
-  const cursorRef = useRef<Cursor>({ sequence: -1 })
+  const cursorsRef = useRef(new Map<string, number>())
   const eventIdsRef = useRef(new Set<string>())
   const eventHandlerRef = useRef(onEvent)
 
@@ -23,7 +18,7 @@ export function useConversationEvents(
   }, [onEvent])
 
   useEffect(() => {
-    cursorRef.current = { sequence: -1 }
+    cursorsRef.current.clear()
     eventIdsRef.current.clear()
     if (conversationId === null) return
     const selectedConversationId: string = conversationId
@@ -36,9 +31,8 @@ export function useConversationEvents(
     function connect() {
       if (stopped) return
       setConnection(attempts === 0 ? 'connecting' : 'reconnecting')
-      const cursor = cursorRef.current
       socket = new WebSocket(
-        buildWebSocketUrl(selectedConversationId, cursor.executionId, cursor.sequence),
+        buildWebSocketUrl(selectedConversationId, undefined, -1, cursorsRef.current),
       )
       socket.addEventListener('open', () => {
         attempts = 0
@@ -48,7 +42,10 @@ export function useConversationEvents(
         const event = JSON.parse(message.data) as RealtimeEvent
         if (eventIdsRef.current.has(event.event_id)) return
         eventIdsRef.current.add(event.event_id)
-        cursorRef.current = { executionId: event.execution_id, sequence: event.sequence }
+        cursorsRef.current.set(
+          event.execution_id,
+          Math.max(cursorsRef.current.get(event.execution_id) ?? -1, event.sequence),
+        )
         eventHandlerRef.current(event)
       })
       socket.addEventListener('close', () => {
@@ -68,9 +65,7 @@ export function useConversationEvents(
   }, [conversationId])
 
   const followExecution = useCallback((executionId: string) => {
-    if (cursorRef.current.executionId !== executionId) {
-      cursorRef.current = { executionId, sequence: -1 }
-    }
+    if (!cursorsRef.current.has(executionId)) cursorsRef.current.set(executionId, -1)
   }, [])
 
   return { connection, followExecution }

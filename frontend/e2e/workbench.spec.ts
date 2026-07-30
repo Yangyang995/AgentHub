@@ -4,6 +4,8 @@ const projectId = '00000000-0000-0000-0000-000000000001'
 const agentId = '00000000-0000-0000-0000-000000000002'
 const conversationId = '00000000-0000-0000-0000-000000000003'
 const executionId = '00000000-0000-0000-0000-000000000004'
+const secondAgentId = '00000000-0000-0000-0000-000000000007'
+const secondExecutionId = '00000000-0000-0000-0000-000000000008'
 
 const conversation = {
   id: conversationId,
@@ -216,4 +218,181 @@ test('消息区内容过长时保持独立滚动', async ({ page }) => {
   expect(layout.documentScrollY).toBe(0)
   expect(layout.composerInsideViewport).toBe(true)
   expect(layout.listEndsBeforeComposer).toBe(true)
+})
+
+test('??????? DeepSeek', async ({ page }) => {
+  let submittedProvider: string | undefined
+  await mockChatApi(page)
+  await page.route('**/api/v1/projects/**/conversations', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+    const body = route.request().postDataJSON() as { provider?: string }
+    submittedProvider = body.provider
+    await route.fulfill({
+      status: 201,
+      json: {
+        ...conversation,
+        id: '00000000-0000-0000-0000-000000000099',
+        agent_name: 'DeepSeek',
+        title: '???',
+      },
+    })
+  })
+  await page.goto('/')
+  const viewport = page.viewportSize()
+  if (viewport !== null && viewport.width <= 720) {
+    await page.getByRole('button', { name: '??????' }).click()
+  }
+  await expect(page.getByRole('button', { name: '?? Agent' })).toHaveCount(0)
+  await page.getByRole('button', { name: '????' }).click()
+  await expect(page.getByRole('radio', { name: /DeepSeek/ })).toBeVisible()
+  await expect(page.getByRole('radio')).toHaveCount(1)
+  await expect(page.getByLabel('Agent ??')).toHaveCount(0)
+  await page.getByRole('radio', { name: /DeepSeek/ }).check()
+  await page.getByRole('button', { name: '??' }).click()
+  await expect.poll(() => submittedProvider).toBe('deepseek')
+  await expect(page.getByRole('heading', { name: '???' })).toBeVisible()
+  await expect(page.locator('main .agent-badge')).toHaveText('DeepSeek')
+})
+
+test('群聊 @ 建议和交错并发流保持 Agent 身份及顺序稳定', async ({ page }) => {
+  const agents = [
+    {
+      id: agentId,
+      project_id: projectId,
+      name: 'Code',
+      agent_type: 'mock',
+      capabilities: ['code_generation'],
+      status: 'enabled',
+      adapter_config_ref: null,
+      created_at: '2026-07-29T00:00:00Z',
+      updated_at: '2026-07-29T00:00:00Z',
+    },
+    {
+      id: secondAgentId,
+      project_id: projectId,
+      name: 'Coder',
+      agent_type: 'mock',
+      capabilities: ['code_review'],
+      status: 'enabled',
+      adapter_config_ref: null,
+      created_at: '2026-07-29T00:00:00Z',
+      updated_at: '2026-07-29T00:00:00Z',
+    },
+  ]
+  const groupConversation = {
+    id: conversationId,
+    project_id: projectId,
+    agent_id: null,
+    title: '并发检查',
+    conversation_type: 'group',
+    status: 'idle',
+    participants: agents.map(({ id, name, agent_type, capabilities, status }) => ({
+      id,
+      name,
+      agent_type,
+      capabilities,
+      status,
+    })),
+    created_at: '2026-07-29T00:00:00Z',
+    updated_at: '2026-07-29T00:00:00Z',
+  }
+  let socket: WebSocketRoute | undefined
+
+  await page.routeWebSocket('**/ws/**', (route) => { socket = route })
+  await page.route('**/api/v1/projects/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.pathname.endsWith('/agents')) {
+      await route.fulfill({ json: agents })
+      return
+    }
+    if (url.pathname.endsWith('/conversations')) {
+      await route.fulfill({ json: [groupConversation] })
+      return
+    }
+    if (url.pathname.endsWith('/messages') && request.method() === 'GET') {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (url.pathname.endsWith('/messages') && request.method() === 'POST') {
+      const body = request.postDataJSON() as { content: string }
+      const userMessage = {
+        id: '00000000-0000-0000-0000-000000000009',
+        conversation_id: conversationId,
+        project_id: projectId,
+        parent_message_id: null,
+        role: 'user',
+        agent_id: null,
+        content: body.content,
+        content_type: 'markdown',
+        sequence: 0,
+        created_at: '2026-07-29T00:00:00Z',
+      }
+      const execution = (id: string, targetAgentId: string) => ({
+        id,
+        project_id: projectId,
+        message_id: userMessage.id,
+        agent_id: targetAgentId,
+        conversation_id: conversationId,
+        status: 'pending',
+        sequence: -1,
+        error_code: null,
+        error_message: null,
+        started_at: null,
+        completed_at: null,
+        created_at: userMessage.created_at,
+      })
+      await route.fulfill({
+        status: 202,
+        json: {
+          message: userMessage,
+          executions: [execution(executionId, agentId), execution(secondExecutionId, secondAgentId)],
+        },
+      })
+      return
+    }
+    await route.fulfill({ status: 404, json: { detail: 'Not found' } })
+  })
+
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: '并发检查' })).toBeVisible()
+  const input = page.getByLabel('输入消息')
+  await input.fill('@Co')
+  await expect(page.getByRole('listbox', { name: '@Agent 建议' })).toBeVisible()
+  await expect(page.getByRole('option')).toHaveCount(2)
+  await input.press('Enter')
+  await expect(input).toHaveValue('@Code ')
+  await input.fill('@Code @Coder 并发检查')
+  await page.getByRole('button', { name: '发送消息' }).click()
+  await expect(page.locator('.message-row--streaming')).toHaveCount(2)
+  if (socket === undefined) throw new Error('WebSocket 尚未连接')
+
+  const concurrentEvent = (
+    eventId: string,
+    targetExecutionId: string,
+    sequence: number,
+    delta: string,
+  ) => JSON.stringify({
+    event_id: eventId,
+    conversation_id: conversationId,
+    execution_id: targetExecutionId,
+    sequence,
+    type: 'content.delta',
+    timestamp: '2026-07-29T00:00:00Z',
+    payload: { delta, content_type: 'markdown' },
+  })
+  socket.send(concurrentEvent('00000000-0000-0000-0000-000000000011', secondExecutionId, 1, 'Coder-1'))
+  socket.send(concurrentEvent('00000000-0000-0000-0000-000000000012', executionId, 1, 'Code-1'))
+  socket.send(concurrentEvent('00000000-0000-0000-0000-000000000013', secondExecutionId, 2, ' Coder-2'))
+
+  const rows = page.locator('.message-row--streaming')
+  await expect(rows.nth(0)).toContainText('Code')
+  await expect(rows.nth(0)).toContainText('Code-1')
+  await expect(rows.nth(0)).not.toContainText('Coder-1')
+  await expect(rows.nth(1)).toContainText('Coder')
+  await expect(rows.nth(1)).toContainText('Coder-1 Coder-2')
+  await expect(rows.nth(1)).not.toContainText('Code-1')
 })

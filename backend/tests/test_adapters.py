@@ -1,9 +1,9 @@
-"""Agent Adapter ????????
+"""Agent Adapter 单元测试。
 
-???
-- AgentEvent ???????????/????
-- Mock Adapter ???????????
-- Codex CLI Adapter ???????????????
+测试覆盖：
+- AgentEvent 可判别联合类型的序列化与反序列化
+- Mock Adapter 的确定性脚本执行
+- Adapter 协议类型校验
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter
 
-from agenthub.adapters.codex_cli import CodexCLIAdapter
 from agenthub.adapters.mock_adapter import (
     MockAdapter,
     MockAdapterScript,
@@ -37,40 +36,40 @@ from agenthub.adapters.protocol import (
     ExecutionUsageEvent,
 )
 
-# ???????????????????????????????????????????????????????????????????????????
-# ????
-# ???????????????????????????????????????????????????????????????????????????
+# ----------------------------------------------------------------------
+# 工具函数
+# ----------------------------------------------------------------------
 
 
 @pytest.fixture
 def sample_task() -> AgentTask:
-    """???? AgentTask??????????????"""
+    """构建最小 AgentTask 用于测试。"""
     return AgentTask(
         execution_id=uuid.uuid4(),
         project_id=uuid.uuid4(),
         agent_id=uuid.uuid4(),
         conversation_id=uuid.uuid4(),
-        message_content="???????????",
+        message_content="Hello, please write some code.",
         working_dir=Path.cwd(),
     )
 
 
 @pytest.fixture
 def sample_task_dict(sample_task: AgentTask) -> dict[str, Any]:
-    """AgentTask ???????? JSON ?????"""
+    """AgentTask 序列化为 JSON 后不含多余字段。"""
     return sample_task.model_dump(mode="json")
 
 
-# ???????????????????????????????????????????????????????????????????????????
-# AgentEvent ?????????
-# ???????????????????????????????????????????????????????????????????????????
+# ----------------------------------------------------------------------
+# AgentEvent 可判别联合类型
+# ----------------------------------------------------------------------
 
 
 class TestAgentEventDiscriminatedUnion:
-    """?? AgentEvent ???????????/?????"""
+    """测试 AgentEvent 可判别联合类型的序列化和反序列化。"""
 
     def test_content_delta_serialization(self) -> None:
-        """content.delta ????????? event_type ?????"""
+        """content.delta 序列化后 event_type 为 content.delta。"""
         event = ContentDeltaEvent(
             execution_id=uuid.uuid4(),
             sequence=5,
@@ -84,7 +83,7 @@ class TestAgentEventDiscriminatedUnion:
         assert parsed.delta == "Hello World"
 
     def test_execution_status_serialization(self) -> None:
-        """execution.status ????????"""
+        """execution.status 序列化测试。"""
         event = ExecutionStatusEvent(
             execution_id=uuid.uuid4(),
             sequence=0,
@@ -96,12 +95,12 @@ class TestAgentEventDiscriminatedUnion:
         assert parsed.status == "running"
 
     def test_execution_error_serialization(self) -> None:
-        """execution.error ????????"""
+        """execution.error 序列化测试。"""
         event = ExecutionErrorEvent(
             execution_id=uuid.uuid4(),
             sequence=10,
             error_code=AdapterErrorCode.TIMEOUT,
-            error_message="????",
+            error_message="测试错误",
             recoverable=False,
         )
         data = event.model_dump(mode="json")
@@ -110,7 +109,7 @@ class TestAgentEventDiscriminatedUnion:
         assert parsed.error_code == AdapterErrorCode.TIMEOUT
 
     def test_execution_usage_serialization(self) -> None:
-        """execution.usage ????????"""
+        """execution.usage 序列化测试。"""
         event = ExecutionUsageEvent(
             execution_id=uuid.uuid4(),
             sequence=3,
@@ -124,7 +123,7 @@ class TestAgentEventDiscriminatedUnion:
         assert parsed.token_count == 150
 
     def test_artifact_created_serialization(self) -> None:
-        """artifact.created ????????"""
+        """artifact.created 序列化测试。"""
         event = ArtifactCreatedEvent(
             execution_id=uuid.uuid4(),
             sequence=7,
@@ -141,7 +140,7 @@ class TestAgentEventDiscriminatedUnion:
         assert parsed.relative_path == "src/main.py"
 
     def test_agent_result_serialization(self) -> None:
-        """AgentResult ??????"""
+        """AgentResult 序列化测试。"""
         result = AgentResult(
             execution_id=uuid.uuid4(),
             status="succeeded",
@@ -164,7 +163,7 @@ class TestAgentEventDiscriminatedUnion:
         assert len(parsed.artifacts) == 1
 
     def test_sequence_monotonic_increasing(self) -> None:
-        """?? execution_id ??? sequence ???????"""
+        """验证 execution_id 和 sequence 正确传递。"""
         exec_id = uuid.uuid4()
         events: list[AgentEvent] = [
             ContentDeltaEvent(execution_id=exec_id, sequence=0, delta="a"),
@@ -173,40 +172,37 @@ class TestAgentEventDiscriminatedUnion:
         ]
         sequences = [e.sequence for e in events]
         assert sequences == sorted(sequences)
-        assert len(set(sequences)) == len(sequences)  # ???
+        assert len(set(sequences)) == len(sequences)  # 验证所有 event_id 唯一
 
     def test_event_id_unique_per_event(self) -> None:
-        """????? event_id ????"""
+        """验证不同事件的 event_id 唯一性。"""
         events: list[AgentEvent] = [
             ContentDeltaEvent(execution_id=uuid.uuid4(), sequence=0, delta="a"),
             ContentDeltaEvent(execution_id=uuid.uuid4(), sequence=1, delta="b"),
         ]
-        # ????? event_id ????
+        # 验证 event_id 唯一性
         assert events[0].event_id != events[1].event_id
 
     def test_agent_health_serialization(self) -> None:
-        """AdapterHealth ????"""
+        """AdapterHealth 序列化测试。"""
         health = AdapterHealth(
             healthy=False,
-            adapter_type="codex_cli",
+            adapter_type="mock",
             version=None,
-            message="Codex CLI ???",
+            message="Mock 不可用",
         )
         data = health.model_dump(mode="json")
         assert data["healthy"] is False
-        assert data["adapter_type"] == "codex_cli"
 
 
-# ???????????????????????????????????????????????????????????????????????????
-# AgentTask ??
-# ???????????????????????????????????????????????????????????????????????????
+# AgentTask 测试
 
 
 class TestAgentTask:
-    """AgentTask ??????"""
+    """AgentTask 构造和序列化测试。"""
 
     def test_minimal_task(self) -> None:
-        """???????"""
+        """最小任务构造。"""
         task = AgentTask(
             execution_id=uuid.uuid4(),
             project_id=uuid.uuid4(),
@@ -219,7 +215,7 @@ class TestAgentTask:
         assert task.context == {}
 
     def test_task_with_timeout(self) -> None:
-        """???????"""
+        """最小任务构造。"""
         task = AgentTask(
             execution_id=uuid.uuid4(),
             project_id=uuid.uuid4(),
@@ -232,7 +228,7 @@ class TestAgentTask:
         assert task.timeout_seconds == 30
 
     def test_task_timeout_minimum(self) -> None:
-        """?????? 1 ??"""
+        """序列化后不含额外字段。"""
         with pytest.raises(Exception):  # noqa: B017
             AgentTask(
                 execution_id=uuid.uuid4(),
@@ -245,18 +241,16 @@ class TestAgentTask:
             )
 
 
-# ???????????????????????????????????????????????????????????????????????????
-# Mock Adapter ??
-# ???????????????????????????????????????????????????????????????????????????
+# Mock Adapter 成功路径
 
 
 class TestMockAdapterSuccess:
-    """Mock Adapter ???????"""
+    """Mock Adapter 成功路径测试。"""
 
     async def _collect_events(
         self, adapter: MockAdapter, task: AgentTask
     ) -> tuple[list[AgentEvent], AgentResult]:
-        """?????????????????????"""
+        """执行后正确产生状态事件。"""
         events: list[AgentEvent] = []
         async for event in adapter.run(task):
             events.append(event)
@@ -269,7 +263,7 @@ class TestMockAdapterSuccess:
 
     @pytest.mark.asyncio
     async def test_healthcheck(self) -> None:
-        """Mock ??????????? healthy?"""
+        """Mock 始终返回 healthy=True。"""
         script = MockAdapterScript(adapter_name="test-mock")
         adapter = MockAdapter(script)
         health = await adapter.healthcheck()
@@ -279,7 +273,7 @@ class TestMockAdapterSuccess:
 
     @pytest.mark.asyncio
     async def test_empty_script_succeeds(self, sample_task: AgentTask) -> None:
-        """?????? running -> succeeded ??????????"""
+        """状态应从 running 过渡到 succeeded。"""
         script = MockAdapterScript()
         adapter = MockAdapter(script)
         events, result = await self._collect_events(adapter, sample_task)
@@ -287,7 +281,7 @@ class TestMockAdapterSuccess:
         assert result.status == "succeeded"
         assert result.error_code is None
         assert len(result.artifacts) == 0
-        # ???? running ? succeeded ????
+        # 确认 running 和 succeeded 事件
         status_events = [e for e in events if isinstance(e, ExecutionStatusEvent)]
         statuses = [e.status for e in status_events]
         assert "running" in statuses
@@ -295,11 +289,11 @@ class TestMockAdapterSuccess:
 
     @pytest.mark.asyncio
     async def test_delta_events(self, sample_task: AgentTask) -> None:
-        """delta ???? content.delta ???"""
+        """delta 步骤产生 content.delta 事件。"""
         script = MockAdapterScript(
             script=[
-                MockScriptStep(action="delta", content="???"),
-                MockScriptStep(action="delta", content="???"),
+                MockScriptStep(action="delta", content="你好"),
+                MockScriptStep(action="delta", content="你好"),
             ]
         )
         adapter = MockAdapter(script)
@@ -307,13 +301,13 @@ class TestMockAdapterSuccess:
 
         deltas = [e for e in events if isinstance(e, ContentDeltaEvent)]
         assert len(deltas) == 2
-        assert deltas[0].delta == "???"
-        assert deltas[1].delta == "???"
+        assert deltas[0].delta == "你好"
+        assert deltas[1].delta == "你好"
         assert result.status == "succeeded"
 
     @pytest.mark.asyncio
     async def test_artifact_events(self, sample_task: AgentTask) -> None:
-        """artifact ???? artifact.created ???"""
+        """artifact 步骤产生 artifact.created 事件。"""
         test_content = "print('hello')"
         expected_hash = hashlib.sha256(test_content.encode()).hexdigest()
 
@@ -341,7 +335,7 @@ class TestMockAdapterSuccess:
 
     @pytest.mark.asyncio
     async def test_usage_events(self, sample_task: AgentTask) -> None:
-        """usage ???? execution.usage ???"""
+        """usage 步骤产生 execution.usage 事件。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="usage", token_count=100, call_count=1),
@@ -355,12 +349,12 @@ class TestMockAdapterSuccess:
         assert len(usage_events) == 2
         assert usage_events[0].token_count == 100
         assert usage_events[1].token_count == 50
-        # ???? total_tokens ?????
+        # 验证 total_tokens 计算正确
         assert result.total_tokens == 150
 
     @pytest.mark.asyncio
     async def test_sequence_monotonic(self, sample_task: AgentTask) -> None:
-        """Mock Adapter ????? sequence ???????????"""
+        """Mock Adapter 中事件 sequence 单调递增。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="a"),
@@ -373,11 +367,11 @@ class TestMockAdapterSuccess:
         events, _result = await self._collect_events(adapter, sample_task)
 
         sequences = [e.sequence for e in events]
-        assert sequences == list(range(len(sequences))), f"sequence ???: {sequences}"
+        assert sequences == list(range(len(sequences))), f"sequence 非单调递增: {sequences}"
 
 
 class TestMockAdapterErrorAndCancel:
-    """Mock Adapter ??????????"""
+    """Mock Adapter 成功路径测试。"""
 
     async def _collect_events(
         self, adapter: MockAdapter, task: AgentTask
@@ -395,16 +389,16 @@ class TestMockAdapterErrorAndCancel:
 
     @pytest.mark.asyncio
     async def test_error_step_causes_failure(self, sample_task: AgentTask) -> None:
-        """error ???????????? failed?"""
+        """error 步骤后执行状态为 failed。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="before error"),
                 MockScriptStep(
                     action="error",
                     error_code=AdapterErrorCode.INTERNAL_ERROR,
-                    error_message="??????",
+                    error_message="致命错误",
                 ),
-                MockScriptStep(action="delta", content="after error"),  # ????
+                MockScriptStep(action="delta", content="after error"),  # 此 delta 应在错误后送达
             ]
         )
         adapter = MockAdapter(script)
@@ -412,7 +406,7 @@ class TestMockAdapterErrorAndCancel:
 
         assert result.status == "failed"
         assert result.error_code == AdapterErrorCode.INTERNAL_ERROR
-        # "after error" ????
+        # "after error" 文本应送达
         deltas = [e for e in events if isinstance(e, ContentDeltaEvent)]
         delta_texts = [d.delta for d in deltas]
         assert "after error" not in delta_texts
@@ -420,13 +414,13 @@ class TestMockAdapterErrorAndCancel:
 
     @pytest.mark.asyncio
     async def test_error_event_included(self, sample_task: AgentTask) -> None:
-        """error ????? execution.error ???"""
+        """error 步骤产生 execution.error 事件。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(
                     action="error",
                     error_code=AdapterErrorCode.CONFIG_ERROR,
-                    error_message="????",
+                    error_message="测试错误",
                 ),
             ]
         )
@@ -439,7 +433,7 @@ class TestMockAdapterErrorAndCancel:
 
     @pytest.mark.asyncio
     async def test_cancel_before_run(self, sample_task: AgentTask) -> None:
-        """? run ?? cancel?????????"""
+        """在 run 期间调用 cancel 可成功取消。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="step1"),
@@ -447,19 +441,19 @@ class TestMockAdapterErrorAndCancel:
             ]
         )
         adapter = MockAdapter(script)
-        adapter.cancel(uuid.uuid4())  # ? run ????
+        adapter.cancel(uuid.uuid4())  # 在 run 期间取消
 
         events, result = await self._collect_events(adapter, sample_task)
 
         assert result.status == "cancelled"
         assert result.error_code == AdapterErrorCode.CANCELLED
-        # ????? delta ???? running ????????
+        # 取消后 delta 内容不应到达
         deltas = [e for e in events if isinstance(e, ContentDeltaEvent)]
         assert len(deltas) == 0
 
     @pytest.mark.asyncio
     async def test_cancel_at_checkpoint(self, sample_task: AgentTask) -> None:
-        """? cancel_check ??????"""
+        """cancel 后 cancel_check 检查正确。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="step1"),
@@ -469,7 +463,7 @@ class TestMockAdapterErrorAndCancel:
         )
         adapter = MockAdapter(script)
 
-        # ?????? run??? cancel_check ???
+        # 在 run 前设置 cancel_check 标志
         async def run_and_cancel() -> tuple[list[AgentEvent], AgentResult]:
             events: list[AgentEvent] = []
             async for event in adapter.run(sample_task):
@@ -486,14 +480,14 @@ class TestMockAdapterErrorAndCancel:
         events, result = await run_and_cancel()
 
         assert result.status == "cancelled"
-        # step2 ????
+        # step2 不应执行（已取消）
         deltas = [e for e in events if isinstance(e, ContentDeltaEvent)]
         delta_texts = [d.delta for d in deltas]
         assert "step2" not in delta_texts
 
     @pytest.mark.asyncio
     async def test_delay_with_cancel(self, sample_task: AgentTask) -> None:
-        """? delay ????????????"""
+        """带延迟的取消恢复正确。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="before-delay"),
@@ -518,14 +512,14 @@ class TestMockAdapterErrorAndCancel:
             duration_ms=0,
         )
         assert result.status == "cancelled"
-        # delay ???????? 5 ?
-        assert elapsed_ms < 3000, f"?????? 3 ????????? {elapsed_ms:.0f}ms"
+        # delay 总计不超过 5 秒
+        assert elapsed_ms < 3000, f"取消不应超过 3 秒，实际 {elapsed_ms:.0f}ms"
         deltas = [e for e in events if isinstance(e, ContentDeltaEvent)]
         assert "after-delay" not in [d.delta for d in deltas]
 
     @pytest.mark.asyncio
     async def test_deterministic_delay(self, sample_task: AgentTask) -> None:
-        """????????????????????"""
+        """模拟耗时执行的取消。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delay", milliseconds=50),
@@ -537,13 +531,13 @@ class TestMockAdapterErrorAndCancel:
         _events, result = await self._collect_events(adapter, sample_task)
         elapsed_ms = (asyncio.get_event_loop().time() - start) * 1000
 
-        # 50ms ???? 20-200ms ???????????
-        assert 10 < elapsed_ms < 500, f"???? 50ms??? {elapsed_ms:.0f}ms??????"
+        # 50ms 延迟，20-200ms 间取消应生效
+        assert 10 < elapsed_ms < 500, f"延迟约 50ms，实际 {elapsed_ms:.0f}ms"
         assert result.status == "succeeded"
 
 
 class TestMockAdapterEdgeCases:
-    """Mock Adapter ?????"""
+    """Mock Adapter 边界情况测试。"""
 
     async def _collect_events(
         self, adapter: MockAdapter, task: AgentTask
@@ -561,11 +555,11 @@ class TestMockAdapterEdgeCases:
 
     @pytest.mark.asyncio
     async def test_reset_cancel(self, sample_task: AgentTask) -> None:
-        """reset_cancel ????????"""
+        """reset_cancel 在新 run 中重置取消标志。"""
         script = MockAdapterScript(script=[MockScriptStep(action="delta", content="ok")])
         adapter = MockAdapter(script)
         adapter.cancel(uuid.uuid4())
-        # ??????
+        # 首次执行
         adapter.reset_cancel()
 
         _events, result = await self._collect_events(adapter, sample_task)
@@ -573,7 +567,7 @@ class TestMockAdapterEdgeCases:
 
     @pytest.mark.asyncio
     async def test_default_delay_between_steps(self, sample_task: AgentTask) -> None:
-        """default_delay_ms ?????????"""
+        """default_delay_ms 默认为 0。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="delta", content="a"),
@@ -587,12 +581,11 @@ class TestMockAdapterEdgeCases:
         _events, _result = await self._collect_events(adapter, sample_task)
         elapsed_ms = (asyncio.get_event_loop().time() - start) * 1000
 
-        # ?????? 2 ?????????????? 100ms
-        assert elapsed_ms > 50, f"default_delay ???????? {elapsed_ms:.0f}ms"
+        assert elapsed_ms > 50, f"default_delay 默认为 0，实际耗时 {elapsed_ms:.0f}ms"
 
     @pytest.mark.asyncio
     async def test_artifact_without_explicit_path(self, sample_task: AgentTask) -> None:
-        """artifact ??????????????"""
+        """artifact 无 artifact_info 时不产生事件。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="artifact", artifact_content="data"),
@@ -603,12 +596,12 @@ class TestMockAdapterEdgeCases:
 
         artifacts = [e for e in events if isinstance(e, ArtifactCreatedEvent)]
         assert len(artifacts) == 1
-        assert artifacts[0].relative_path == "output.txt"  # ???
-        assert artifacts[0].artifact_type == "file"  # ???
+        assert artifacts[0].relative_path == "output.txt"  # 验证产物路径
+        assert artifacts[0].artifact_type == "file"  # 验证产物类型
 
     @pytest.mark.asyncio
     async def test_token_zero_not_reported(self, sample_task: AgentTask) -> None:
-        """token_count ? 0 ????????? total_tokens?"""
+        """token_count 为 0 时不影响 total_tokens。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(action="usage", token_count=0),
@@ -618,18 +611,18 @@ class TestMockAdapterEdgeCases:
         adapter = MockAdapter(script)
         _events, result = await self._collect_events(adapter, sample_task)
 
-        # total_tokens ? None ??????0 ?????
+        # total_tokens 为 None 时不变，不为 0
         assert result.total_tokens is None or result.total_tokens == 0
 
     @pytest.mark.asyncio
     async def test_recoverable_error(self, sample_task: AgentTask) -> None:
-        """???????? recoverable=True?"""
+        """错误恢复标志 recoverable=True。"""
         script = MockAdapterScript(
             script=[
                 MockScriptStep(
                     action="error",
                     error_code=AdapterErrorCode.TIMEOUT,
-                    error_message="?????",
+                    error_message="可恢复错误",
                     recoverable=True,
                 ),
             ]
@@ -643,7 +636,7 @@ class TestMockAdapterEdgeCases:
 
     @pytest.mark.asyncio
     async def test_error_code_values_not_expose_secrets(self) -> None:
-        """AdpaterErrorCode ???????????"""
+        """AdapterErrorCode 枚举值正确。"""
         for code in AdapterErrorCode:
             assert "password" not in code.value.lower()
             assert "token" not in code.value.lower()
@@ -651,189 +644,6 @@ class TestMockAdapterEdgeCases:
             assert "key" not in code.value.lower()
 
 
-# ???????????????????????????????????????????????????????????????????????????
-# Codex CLI Adapter ??
-# ???????????????????????????????????????????????????????????????????????????
-
-
-class TestCodexCLIHealthCheck:
-    """Codex CLI ????????"""
-
-    @pytest.mark.asyncio
-    async def test_healthcheck_reports_status(self) -> None:
-        """????????????????????????"""
-        adapter = CodexCLIAdapter()
-        health = await adapter.healthcheck()
-        assert isinstance(health, AdapterHealth)
-        assert health.adapter_type == "codex_cli"
-        assert health.message is not None
-        # ??? Windows ???????? unhealthy
-        # ???????? healthy/unhealthy????????
-
-    @pytest.mark.asyncio
-    async def test_healthcheck_caches_result(self) -> None:
-        """???? healthcheck ????????"""
-        adapter = CodexCLIAdapter()
-        health1 = await adapter.healthcheck()
-        health2 = await adapter.healthcheck()
-        # ??????????
-        assert health1.healthy == health2.healthy
-        assert health1.version == health2.version
-
-
-class TestCodexCLIPathValidation:
-    """Codex CLI ???????"""
-
-    def test_valid_working_dir(self) -> None:
-        """???????????"""
-        adapter = CodexCLIAdapter()
-        result = adapter._validate_working_dir(Path.cwd())
-        assert result is None
-
-    def test_nonexistent_dir(self) -> None:
-        """??????????"""
-        adapter = CodexCLIAdapter()
-        result = adapter._validate_working_dir(Path("/nonexistent/path/12345"))
-        assert result is not None
-        assert result[0] == AdapterErrorCode.PATH_REJECTED
-
-    def test_relative_path_rejected(self) -> None:
-        """????????"""
-        adapter = CodexCLIAdapter()
-        result = adapter._validate_working_dir(Path("relative/path"))
-        assert result is not None
-        assert result[0] == AdapterErrorCode.PATH_REJECTED
-
-    def test_file_not_directory_rejected(self, tmp_path: Path) -> None:
-        """??????????"""
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("hello")
-        adapter = CodexCLIAdapter()
-        result = adapter._validate_working_dir(test_file)
-        assert result is not None
-        assert result[0] == AdapterErrorCode.PATH_REJECTED
-
-
-class TestCodexCLIRunUnavailable:
-    """Codex CLI ??????????"""
-
-    @pytest.mark.asyncio
-    async def test_run_when_unavailable_returns_error(self) -> None:
-        """? Codex CLI ?????run ??? UNAVAILABLE ???"""
-        adapter = CodexCLIAdapter(executable_path="/nonexistent/codex")
-        task = AgentTask(
-            execution_id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            agent_id=uuid.uuid4(),
-            conversation_id=uuid.uuid4(),
-            message_content="test",
-            working_dir=Path.cwd(),
-        )
-
-        events: list[AgentEvent] = []
-        async for event in adapter.run(task):
-            events.append(event)
-
-        result = adapter.last_result
-        assert result is not None
-        assert result.status == "failed"
-        assert result.error_code == AdapterErrorCode.UNAVAILABLE
-        # ???????
-        error_events = [e for e in events if isinstance(e, ExecutionErrorEvent)]
-        assert len(error_events) >= 1
-
-    @pytest.mark.asyncio
-    async def test_run_with_invalid_working_dir(self) -> None:
-        """???????? run ??????"""
-        adapter = CodexCLIAdapter(executable_path="/nonexistent/codex")
-        task = AgentTask(
-            execution_id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            agent_id=uuid.uuid4(),
-            conversation_id=uuid.uuid4(),
-            message_content="test",
-            working_dir=Path("/nonexistent/dir"),
-        )
-
-        events: list[AgentEvent] = []
-        async for event in adapter.run(task):
-            events.append(event)
-
-        result = adapter.last_result
-        assert result is not None
-        assert result.status == "failed"
-        # ????????????
-        assert result.error_code == AdapterErrorCode.PATH_REJECTED
-
-
-class TestCodexCLIBuildArgs:
-    """Codex CLI ?????"""
-
-    def test_build_args_no_context(self) -> None:
-        """?????????????"""
-        adapter = CodexCLIAdapter()
-        task = AgentTask(
-            execution_id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            agent_id=uuid.uuid4(),
-            conversation_id=uuid.uuid4(),
-            message_content="test",
-            working_dir=Path("/tmp"),
-        )
-        args = adapter._build_args(task)
-        assert isinstance(args, list)
-        # ???????
-
-    def test_build_args_with_codex_args(self) -> None:
-        """?? context ?? codex_args?"""
-        adapter = CodexCLIAdapter()
-        task = AgentTask(
-            execution_id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            agent_id=uuid.uuid4(),
-            conversation_id=uuid.uuid4(),
-            message_content="test",
-            working_dir=Path("/tmp"),
-            context={"codex_args": ["--model", "gpt-5", "--verbose"]},
-        )
-        args = adapter._build_args(task)
-        assert "--model" in args
-        assert "gpt-5" in args
-
-
-# ???????????????????????????????????????????????????????????????????????????
-# ??????? Codex CLI ????
-# ???????????????????????????????????????????????????????????????????????????
-
-
-@pytest.mark.asyncio
-async def test_codex_cli_real_skip_if_unavailable() -> None:
-    """? Codex CLI ?????????????
-
-    ?????Windows App ??? codex.exe ?????????Access is denied??
-    """
-    adapter = CodexCLIAdapter()
-    health = await adapter.healthcheck()
-
-    if not health.healthy:
-        pytest.skip(f"Codex CLI ???????????????: {health.message}")
-
-    # ?????????????
-    task = AgentTask(
-        execution_id=uuid.uuid4(),
-        project_id=uuid.uuid4(),
-        agent_id=uuid.uuid4(),
-        conversation_id=uuid.uuid4(),
-        message_content="echo hello",
-        working_dir=Path.cwd(),
-        timeout_seconds=30,
-    )
-    events: list[AgentEvent] = []
-    async for event in adapter.run(task):
-        events.append(event)
-
-    # ????
-    assert len(events) > 0
-    result = adapter.last_result
-    assert result is not None
-    assert result.execution_id == task.execution_id
+# ----------------------------------------------------------------------
+# 注：Codex CLI Adapter 已移除，相关测试已删除
+# ----------------------------------------------------------------------

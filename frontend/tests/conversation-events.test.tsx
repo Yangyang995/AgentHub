@@ -73,7 +73,8 @@ describe('useConversationEvents', () => {
     expect(MockWebSocket.instances).toHaveLength(2)
     const second = MockWebSocket.instances[1]
     if (second === undefined) throw new Error('重连 WebSocket 未创建')
-    expect(second.url).toContain(`execution_id=${deltaEvent.execution_id}`)
-    expect(second.url).toContain('last_sequence=1')
+    expect(second.url).toContain(
+      `cursor=${encodeURIComponent(`${deltaEvent.execution_id}:1`)}`,
+    )
   })
 })

@@ -9,7 +9,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from agenthub.adapters import MockAdapter, MockAdapterScript, MockScriptStep
@@ -402,6 +402,69 @@ async def test_conversation_title_agent_display_and_delete(
 
 
 @pytest.mark.asyncio
+async def test_fixed_providers_create_internal_agents_idempotently_and_keep_legacy_contract(
+    chat_context: tuple[
+        AsyncClient,
+        async_sessionmaker[AsyncSession],
+        dict[uuid.UUID, Callable[[], AgentAdapter]],
+        Project,
+        Agent,
+        ChatService,
+    ],
+) -> None:
+    """三种固定提供方应映射到内部 Agent，且不破坏旧 agent_id 单聊请求。"""
+    client, factory, _, project, legacy_agent, _ = chat_context
+    expected = {
+        "deepseek": ("DeepSeek", "openai_compatible"),
+    }
+
+    for provider, (name, agent_type) in expected.items():
+        first = await client.post(
+            f"/api/v1/projects/{project.id}/conversations",
+            json={"provider": provider, "conversation_type": "direct"},
+        )
+        repeated = await client.post(
+            f"/api/v1/projects/{project.id}/conversations",
+            json={"provider": provider, "conversation_type": "direct"},
+        )
+        assert first.status_code == 201, first.text
+        assert repeated.status_code == 201, repeated.text
+        assert first.json()["agent_name"] == name
+        assert first.json()["agent_type"] == agent_type
+        assert repeated.json()["agent_id"] == first.json()["agent_id"]
+
+    async with factory() as session:
+        provider_agent_count = await session.scalar(
+            select(func.count(Agent.id)).where(
+                Agent.project_id == project.id,
+                Agent.name.in_([item[0] for item in expected.values()]),
+            )
+        )
+    assert provider_agent_count == 3
+
+    legacy = await client.post(
+        f"/api/v1/projects/{project.id}/conversations",
+        json={"agent_id": str(legacy_agent.id), "conversation_type": "direct"},
+    )
+    ambiguous = await client.post(
+        f"/api/v1/projects/{project.id}/conversations",
+        json={
+            "agent_id": str(legacy_agent.id),
+            "provider": "deepseek",
+            "conversation_type": "direct",
+        },
+    )
+    missing = await client.post(
+        f"/api/v1/projects/{project.id}/conversations",
+        json={"conversation_type": "direct"},
+    )
+    assert legacy.status_code == 201
+    assert legacy.json()["agent_id"] == str(legacy_agent.id)
+    assert ambiguous.status_code == 409
+    assert missing.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_active_conversation_cannot_be_deleted_until_cancelled(
     chat_context: tuple[
         AsyncClient,
@@ -562,5 +625,32 @@ def test_websocket_reconnect_replays_only_missing_events() -> None:
             assert {event["event_id"] for event in first[:2]}.isdisjoint(
                 event["event_id"] for event in resumed
             )
+
+            second_submission = client.post(
+                f"/api/v1/projects/{project_id}/conversations/{conversation_id}/messages",
+                json={"content": "second stream"},
+            )
+            assert second_submission.status_code == 202
+            second_execution_id = second_submission.json()["execution"]["id"]
+            second_path = (
+                f"/ws/conversations/{conversation_id}?project_id={project_id}"
+                f"&execution_id={second_execution_id}&last_sequence=-1"
+            )
+            with client.websocket_connect(second_path) as websocket:
+                second_events = [websocket.receive_json() for _ in range(4)]
+            assert [event["sequence"] for event in second_events] == [0, 1, 2, 3]
+            multi_cursor_path = (
+                f"/ws/conversations/{conversation_id}?project_id={project_id}"
+                f"&cursor={execution_id}:1&cursor={second_execution_id}:1"
+            )
+            with client.websocket_connect(multi_cursor_path) as websocket:
+                multi_cursor_events = [websocket.receive_json() for _ in range(4)]
+            events_by_execution: dict[str, list[int]] = {}
+            for event in multi_cursor_events:
+                events_by_execution.setdefault(event["execution_id"], []).append(event["sequence"])
+            assert events_by_execution == {
+                execution_id: [2, 3],
+                second_execution_id: [2, 3],
+            }
     finally:
         asyncio.run(cleanup(project_id))

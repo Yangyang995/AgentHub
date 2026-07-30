@@ -49,13 +49,229 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/agents": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Create Agent",
+        "description": "注册项目 Agent。",
+        "operationId": "create_agent_api_v1_projects__project_id__agents_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "List Agents",
+        "description": "列出项目 Agent。",
+        "operationId": "list_agents_api_v1_projects__project_id__agents_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentResponse"
+                  },
+                  "title": "Response List Agents Api V1 Projects  Project Id  Agents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/agents/{agent_id}": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Get Agent",
+        "description": "读取项目 Agent。",
+        "operationId": "get_agent_api_v1_projects__project_id__agents__agent_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Update Agent",
+        "description": "更新 Agent 能力、名称或启停状态。",
+        "operationId": "update_agent_api_v1_projects__project_id__agents__agent_id__patch",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/conversations": {
       "post": {
         "tags": [
           "chat"
         ],
         "summary": "Create Conversation",
-        "description": "创建绑定一个已启用 Agent 的单聊会话。",
+        "description": "创建单聊或群聊会话。",
         "operationId": "create_conversation_api_v1_projects__project_id__conversations_post",
         "parameters": [
           {
@@ -85,7 +301,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GroupConversationResponse"
+                    }
+                  ],
+                  "title": "Response Create Conversation Api V1 Projects  Project Id  Conversations Post"
                 }
               }
             }
@@ -129,7 +353,14 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ConversationResponse"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/ConversationResponse"
+                      },
+                      {
+                        "$ref": "#/components/schemas/GroupConversationResponse"
+                      }
+                    ]
                   },
                   "title": "Response List Conversations Api V1 Projects  Project Id  Conversations Get"
                 }
@@ -185,7 +416,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GroupConversationResponse"
+                    }
+                  ],
+                  "title": "Response Get Conversation Api V1 Projects  Project Id  Conversations  Conversation Id  Get"
                 }
               }
             }
@@ -350,7 +589,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageSubmissionResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GroupMessageSubmissionResponse"
+                    }
+                  ],
+                  "title": "Response Submit Message Api V1 Projects  Project Id  Conversations  Conversation Id  Messages Post"
                 }
               }
             }
@@ -427,6 +674,67 @@
   },
   "components": {
     "schemas": {
+      "AgentCapability": {
+        "type": "string",
+        "enum": [
+          "requirement_analysis",
+          "architecture_design",
+          "code_generation",
+          "code_review",
+          "testing",
+          "documentation",
+          "file_operation",
+          "deployment"
+        ],
+        "title": "AgentCapability",
+        "description": "Agent 能力声明，用于 Orchestrator 能力匹配。\n\n与 6 个预置子 Agent 一一对应：\n- requirement_analysis：需求分析专家\n- architecture_design：架构设计专家\n- code_generation：代码生成专家\n- code_review：代码审查专家\n- testing：测试专家\n- documentation：技术报告撰写专家"
+      },
+      "AgentCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "agent_type": {
+            "$ref": "#/components/schemas/AgentType"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentCapability"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "adapter_config_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Config Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "agent_type"
+        ],
+        "title": "AgentCreate",
+        "description": "创建 Agent 请求。"
+      },
       "AgentExecutionResponse": {
         "properties": {
           "id": {
@@ -531,15 +839,154 @@
         "title": "AgentExecutionResponse",
         "description": "执行记录响应。"
       },
+      "AgentResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "agent_type": {
+            "$ref": "#/components/schemas/AgentType"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentStatus"
+          },
+          "adapter_config_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Config Ref"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "agent_type",
+          "capabilities",
+          "status",
+          "adapter_config_ref",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentResponse",
+        "description": "Agent 响应。"
+      },
+      "AgentStatus": {
+        "type": "string",
+        "enum": [
+          "enabled",
+          "disabled"
+        ],
+        "title": "AgentStatus",
+        "description": "Agent 启用/停用状态。"
+      },
       "AgentType": {
         "type": "string",
         "enum": [
           "mock",
+          "openai_compatible",
           "codex_cli",
-          "openai_compatible"
+          "claude_code"
         ],
         "title": "AgentType",
-        "description": "Agent 平台类型——决定调用哪个 Adapter。"
+        "description": "Agent 平台类型——决定调用哪个 Adapter。\n\nCODEX_CLI 和 CLAUDE_CODE 已废弃，保留以兼容已有数据库记录。\n新 Agent 注册应仅使用 MOCK 或 OPENAI_COMPATIBLE。"
+      },
+      "AgentUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentCapability"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adapter_config_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Config Ref"
+          }
+        },
+        "type": "object",
+        "title": "AgentUpdate",
+        "description": "更新 Agent 请求。"
       },
       "ConversationCreate": {
         "properties": {
@@ -560,17 +1007,92 @@
             "default": "direct"
           },
           "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "deepseek"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "participant_agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Participant Agent Ids"
+          }
+        },
+        "type": "object",
+        "title": "ConversationCreate",
+        "description": "创建会话请求。"
+      },
+      "ConversationParticipantResponse": {
+        "properties": {
+          "id": {
             "type": "string",
             "format": "uuid",
-            "title": "Agent Id"
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "agent_type": {
+            "$ref": "#/components/schemas/AgentType"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentStatus"
           }
         },
         "type": "object",
         "required": [
-          "agent_id"
+          "id",
+          "name",
+          "agent_type",
+          "capabilities",
+          "status"
         ],
-        "title": "ConversationCreate",
-        "description": "创建会话请求。"
+        "title": "ConversationParticipantResponse",
+        "description": "群聊参与 Agent 的公开展示信息。"
       },
       "ConversationResponse": {
         "properties": {
@@ -629,7 +1151,9 @@
             "title": "Title"
           },
           "conversation_type": {
-            "$ref": "#/components/schemas/ConversationType"
+            "type": "string",
+            "const": "direct",
+            "title": "Conversation Type"
           },
           "created_at": {
             "type": "string",
@@ -655,6 +1179,19 @@
         "title": "ConversationResponse",
         "description": "会话响应。"
       },
+      "ConversationStatus": {
+        "type": "string",
+        "enum": [
+          "idle",
+          "running",
+          "succeeded",
+          "partial_failed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ConversationStatus",
+        "description": "会话最近一次消息批次的聚合状态。"
+      },
       "ConversationType": {
         "type": "string",
         "enum": [
@@ -675,6 +1212,95 @@
         ],
         "title": "ExecutionStatus",
         "description": "Agent 执行生命周期状态。"
+      },
+      "GroupConversationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "agent_id": {
+            "type": "null",
+            "title": "Agent Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "conversation_type": {
+            "type": "string",
+            "const": "group",
+            "title": "Conversation Type"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConversationStatus"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationParticipantResponse"
+            },
+            "type": "array",
+            "title": "Participants"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "title",
+          "conversation_type",
+          "status",
+          "participants",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GroupConversationResponse",
+        "description": "群聊响应独立于既有单聊响应，避免改变 Phase 5 契约。"
+      },
+      "GroupMessageSubmissionResponse": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/MessageResponse"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentExecutionResponse"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Executions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "executions"
+        ],
+        "title": "GroupMessageSubmissionResponse",
+        "description": "群聊一次显式路由产生一个用户消息和多个独立执行。"
       },
       "HTTPValidationError": {
         "properties": {

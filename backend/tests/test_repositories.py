@@ -217,7 +217,7 @@ class TestTransactionRollback:
 
     async def test_flush_does_not_commit(self, db_session: AsyncSession) -> None:
         """Repository flush 不会提交事务；数据在事务内可见但未持久化到数据库。"""
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         repo = _make_repo(db_session)
         created = await repo.create(_make_create(name="rollback-me"))
