@@ -33,6 +33,7 @@ import {
   type RealtimeEvent,
 } from '../api/chat'
 import { ConnectionStatus } from '../components/connection-status'
+import { CodeSummaryPanel } from '../components/code-summary-panel'
 import { MarkdownContent } from '../components/markdown-content'
 import { useConversationEvents } from '../hooks/use-conversation-events'
 
@@ -57,15 +58,44 @@ function statusLabel(status: ExecutionStatus) {
   return labels[status]
 }
 
+/** 按会话 ID 隔离存储代码汇总面板数据，刷新后恢复 */
+function codeSummaryStorageKey(conversationId: string): string {
+  return `agenthub_code_summaries:${conversationId}`
+}
+
+function loadCodeSummaries(conversationId: string | null): Map<string, { agentName: string; files: import('../api/chat').CodeSummaryFile[]; isFirstGeneration: boolean }> {
+  if (conversationId === null) return new Map()
+  try {
+    const raw = localStorage.getItem(codeSummaryStorageKey(conversationId))
+    if (raw === null) return new Map()
+    const parsed = JSON.parse(raw) as [string, { agentName: string; files: import('../api/chat').CodeSummaryFile[]; isFirstGeneration: boolean }][]
+    return new Map(parsed)
+  } catch {
+    return new Map()
+  }
+}
+
+function saveCodeSummaries(conversationId: string, data: Map<string, { agentName: string; files: import('../api/chat').CodeSummaryFile[]; isFirstGeneration: boolean }>): void {
+  try {
+    localStorage.setItem(codeSummaryStorageKey(conversationId), JSON.stringify([...data.entries()]))
+  } catch {
+    // localStorage 不可用或配额满时静默忽略
+  }
+}
+
+
 export function WorkbenchPage() {
   const queryClient = useQueryClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [newConversationOpen, setNewConversationOpen] = useState(false)
   const [conversationMode, setConversationMode] = useState<'direct' | 'group'>('direct')
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
+    return localStorage.getItem("agenthub_active_conversation")
+  })
   const [draft, setDraft] = useState('')
   const [streams, setStreams] = useState<Record<string, StreamMessage>>({})
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
+  const [codeSummaryByExecution, setCodeSummaryByExecution] = useState<Map<string, { agentName: string; files: import('../api/chat').CodeSummaryFile[]; isFirstGeneration: boolean }>>(() => loadCodeSummaries(activeConversationId))
   const [createError, setCreateError] = useState<string | null>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
@@ -76,6 +106,8 @@ export function WorkbenchPage() {
   useEffect(() => {
     workspaceConfig.init().then(() => { setProjectReady(true) }).catch(() => { setProjectReady(true) })
   }, [])
+
+
 
   const conversations = useQuery({
     queryKey: ['conversations', workspaceConfig.projectId],
@@ -91,6 +123,7 @@ export function WorkbenchPage() {
 
   const selectedConversationId = activeConversationId ?? conversations.data?.[0]?.id ?? null
 
+
   const messages = useQuery({
     queryKey: ['messages', selectedConversationId],
     queryFn: ({ signal }) => {
@@ -99,6 +132,10 @@ export function WorkbenchPage() {
     },
     enabled: selectedConversationId !== null,
   })
+
+
+
+
 
   const activeConversation = conversations.data?.find(
     (conversation) => conversation.id === selectedConversationId,
@@ -129,7 +166,43 @@ export function WorkbenchPage() {
     [knownAgents],
   )
 
+
+
+
+
+  // 切换会话时同时清空代码汇总状态并持久化
+  function switchConversation(id: string | null) {
+    setActiveConversationId(id)
+    setCodeSummaryByExecution(loadCodeSummaries(id))
+    if (id !== null) {
+      localStorage.setItem("agenthub_active_conversation", id)
+    } else {
+      localStorage.removeItem("agenthub_active_conversation")
+    }
+  }
+
   function handleRealtimeEvent(event: RealtimeEvent) {
+    // Phase 7: ???????????????????? Schema ????
+    const rawEvent = event as unknown as { type: string; execution_id: string; payload: Record<string, unknown> }
+    if (rawEvent.type === 'code.summary') {
+      const p = rawEvent.payload
+      const executionId = typeof p.execution_id === 'string' ? p.execution_id : ''
+      const agentName = typeof p.agent_name === 'string' ? p.agent_name : 'Agent'
+      const isFirstGeneration = typeof p.is_first_generation === 'boolean' ? p.is_first_generation : false
+      const files = Array.isArray(p.files) ? p.files as import('../api/chat').CodeSummaryFile[] : []
+      if (executionId !== '' && files.length > 0) {
+        setCodeSummaryByExecution((prev) => {
+          const next = new Map(prev)
+          next.set(executionId, { agentName, files, isFirstGeneration })
+          // 持久化到 localStorage，确保刷新后不丢失
+          if (event.conversation_id) {
+            saveCodeSummaries(event.conversation_id, next)
+          }
+          return next
+        })
+      }
+      return
+    }
     setStreams((current) => {
       const existing = current[event.execution_id] ?? {
         conversationId: event.conversation_id,
@@ -180,7 +253,7 @@ export function WorkbenchPage() {
         ['conversations', workspaceConfig.projectId],
         (current: typeof conversations.data) => [conversation, ...(current ?? [])],
       )
-      setActiveConversationId(conversation.id)
+      switchConversation(conversation.id)
       setNewConversationOpen(false)
       setSidebarOpen(false)
     },
@@ -196,7 +269,7 @@ export function WorkbenchPage() {
         ['conversations', workspaceConfig.projectId],
         (current = []) => current.filter((conversation) => conversation.id !== conversationId),
       )
-      if (selectedConversationId === conversationId) setActiveConversationId(null)
+      if (selectedConversationId === conversationId) switchConversation(null)
     },
   })
 
@@ -240,6 +313,8 @@ export function WorkbenchPage() {
     mutationFn: cancelExecution,
     onSuccess: handleRealtimeEvent,
   })
+
+
 
   function sendCurrentDraft() {
     const content = draft.trim()
@@ -343,7 +418,7 @@ export function WorkbenchPage() {
           {conversations.data?.map((conversation) => (
             <div key={conversation.id} className={`conversation-item${conversation.id === selectedConversationId ? ' conversation-item--active' : ''}`}>
               <MessageSquare aria-hidden="true" size={16} />
-              <button className="conversation-item__select" type="button" onClick={() => { setActiveConversationId(conversation.id); setFailedDraft(null); setSidebarOpen(false) }}>
+              <button className="conversation-item__select" type="button" onClick={() => { switchConversation(conversation.id); setFailedDraft(null); setSidebarOpen(false) }}>
                 <strong>{conversation.title ?? '新对话'}</strong><small>{new Date(conversation.updated_at).toLocaleString()}<span className={`conversation-type-badge${isGroupConversation(conversation) ? ' conversation-type-badge--group' : ''}`}>{isGroupConversation(conversation) ? '群聊' : '单聊'}</span></small>
               </button>
               <button className="conversation-item__delete" type="button" aria-label="删除会话" title="删除会话" disabled={deleteMutation.isPending} onClick={() => { deleteMutation.mutate(conversation.id) }}>
@@ -382,18 +457,23 @@ export function WorkbenchPage() {
               {messages.isError ? <div className="center-state" role="alert"><span>消息加载失败</span><button className="secondary-button" type="button" onClick={() => void messages.refetch()}><RefreshCw aria-hidden="true" size={15} />重试</button></div> : null}
               {messages.data?.length === 0 && visibleStreams.length === 0 ? <div className="center-state"><MessageSquare aria-hidden="true" size={22} /><span>发送第一条消息开始协作</span></div> : null}
               {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} />)}
+              {codeSummaryByExecution.size > 0 && activeConversation && isGroupConversation(activeConversation) ? [...codeSummaryByExecution.entries()].map(([id, summary]) => (
+                <CodeSummaryPanel key={`code-summary-${id}`} agentName={summary.agentName} files={summary.files} executionId={id} />
+              )) : null}
               {visibleStreams.map((stream) => (
                 <article key={`execution-${stream.executionId}`} className="message-row message-row--agent message-row--streaming" data-status={stream.status}>
                   <header><Bot aria-hidden="true" size={15} /><strong>{stream.agentName}</strong><span>{statusLabel(stream.status)}</span></header>
-                  {stream.content ? <MarkdownContent content={stream.content} /> : <p className="stream-placeholder">等待内容…</p>}
+                  {stream.content ? <MarkdownContent content={stream.content} truncateAtCodeBlock={activeConversation && isGroupConversation(activeConversation)} /> : <p className="stream-placeholder">等待内容…</p>}
                   {stream.error ? <p className="inline-error" role="alert">{stream.error}</p> : null}
                 </article>
               ))}
+
             {showScrollToBottom ? (
               <button className="scroll-to-bottom" type="button" aria-label="回到最新消息" title="回到最新消息" onClick={scrollToLatestMessage}>
                 <ArrowDown aria-hidden="true" size={20} />
               </button>
             ) : null}
+
             </div>
 
             <form className="composer" onSubmit={(event) => { event.preventDefault(); sendCurrentDraft() }}>
@@ -422,7 +502,7 @@ function MessageRow({ message, agentName }: { message: Message; agentName?: stri
   return (
     <article className={`message-row message-row--${message.role}`}>
       <header><strong>{message.role === 'user' ? '你' : message.role === 'agent' ? agentName ?? 'Agent' : '系统'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></header>
-      <MarkdownContent content={message.content} />
+      <MarkdownContent content={message.content} hideCodeBlocks={false} />
     </article>
   )
 }

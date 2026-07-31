@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { buildWebSocketUrl, type RealtimeEvent } from '../api/chat'
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
+export type ConnectionState = 'connected' | 'disconnected'
 
 export function useConversationEvents(
   conversationId: string | null,
   onEvent: (event: RealtimeEvent) => void,
 ) {
-  const [connection, setConnection] = useState<ConnectionState>('disconnected')
+  const [connection, setConnection] = useState<ConnectionState>('connected')
   const cursorsRef = useRef(new Map<string, number>())
   const eventIdsRef = useRef(new Set<string>())
   const eventHandlerRef = useRef(onEvent)
@@ -28,14 +28,20 @@ export function useConversationEvents(
     let stopped = false
     let attempts = 0
 
+    let disconnectTimer: number | undefined
+
     function connect() {
       if (stopped) return
-      setConnection(attempts === 0 ? 'connecting' : 'reconnecting')
       socket = new WebSocket(
         buildWebSocketUrl(selectedConversationId, undefined, -1, cursorsRef.current),
       )
       socket.addEventListener('open', () => {
         attempts = 0
+        // 清除可能存在的断连延迟计时器——重连成功则维持 connected 状态
+        if (disconnectTimer !== undefined) {
+          window.clearTimeout(disconnectTimer)
+          disconnectTimer = undefined
+        }
         setConnection('connected')
       })
       socket.addEventListener('message', (message: MessageEvent<string>) => {
@@ -50,8 +56,12 @@ export function useConversationEvents(
       })
       socket.addEventListener('close', () => {
         if (stopped) return
-        setConnection('disconnected')
         attempts += 1
+        // 延迟 3 秒才显示断连状态——短时间重连成功则用户无感知
+        if (disconnectTimer !== undefined) window.clearTimeout(disconnectTimer)
+        disconnectTimer = window.setTimeout(() => {
+          setConnection('disconnected')
+        }, 3000)
         retryTimer = window.setTimeout(connect, Math.min(500 * 2 ** (attempts - 1), 5000))
       })
     }
@@ -60,6 +70,7 @@ export function useConversationEvents(
     return () => {
       stopped = true
       if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+      if (disconnectTimer !== undefined) window.clearTimeout(disconnectTimer)
       socket?.close()
     }
   }, [conversationId])

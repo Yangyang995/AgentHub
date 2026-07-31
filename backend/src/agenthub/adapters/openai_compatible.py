@@ -109,6 +109,7 @@ class OpenAICompatibleAdapter:
                         "model": self._model,
                         "messages": self._messages(task),
                         "stream": True,
+                        "max_tokens": 8192,
                     },
                 ) as response:
                     self._active_response = response

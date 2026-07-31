@@ -51,6 +51,7 @@ from agenthub.schemas.domain import (
     MessageSubmissionResponse,
     UserMessageCreate,
 )
+from agenthub.services.diff_tools import compute_unified_diff, extract_code_blocks
 from agenthub.services.realtime import ConversationEventBroker
 
 
@@ -162,6 +163,64 @@ def parse_agent_mentions(content: str, agents: list[Agent]) -> tuple[list[Agent]
             selected.append(agent)
             seen.add(agent.id)
     return selected, unknown
+
+
+# ── 代码块处理工具函数 ──────────────────────────────────────────────
+
+
+def _strip_code_blocks(text: str) -> str:
+    """移除 Markdown fenced code block 及其标注行，保留周围文本。"""
+    return re.sub(
+        r'```[^\n]*\n.*?```',
+        '',
+        text,
+        flags=re.DOTALL,
+    )
+
+
+def _safe_resolve_path(raw_path: str, root_path: str) -> Path | None:
+    """安全解析文件路径，防止目录穿越攻击。"""
+    try:
+        root = Path(root_path).resolve()
+        candidate = (root / raw_path).resolve()
+        candidate.relative_to(root)  # 触发 ValueError 若路径逃逸
+        return candidate.relative_to(root)
+    except (ValueError, OSError):
+        return None
+
+
+
+def _parse_diff_line_numbers(diff_text: str) -> tuple[list[int], list[int]]:
+    """从 unified diff 文本中提取新增行号与删除行号。
+
+    返回 (added_lines, deleted_lines)，均为 1-based 行号列表。
+    """
+    added: list[int] = []
+    deleted: list[int] = []
+    current_old: int | None = None
+    current_new: int | None = None
+    for line in diff_text.split("\n"):
+        hunk = re.match(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+        if hunk:
+            current_old = int(hunk.group(1))
+            current_new = int(hunk.group(2))
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            if current_new is not None:
+                added.append(current_new)
+                current_new += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            if current_old is not None:
+                deleted.append(current_old)
+                current_old += 1
+        elif line.startswith(" "):
+            if current_old is not None:
+                current_old += 1
+            if current_new is not None:
+                current_new += 1
+    return added, deleted
+
+
 
 
 class ChatService:
@@ -506,10 +565,12 @@ class ChatService:
                 context={"messages": history},
             )
             content: list[str] = []
+            execution_succeeded = False
             async for event in adapter.run(task):
                 completed_content = None
                 if isinstance(event, ExecutionStatusEvent) and event.status == "succeeded":
                     completed_content = "".join(content)
+                    execution_succeeded = True
                 persisted = await self._persist_adapter_event(
                     execution_id, event, completed_content=completed_content
                 )
@@ -519,6 +580,121 @@ class ChatService:
                     content.append(event.delta)
                 # 所有事件（含状态变更）都推送到 WebSocket，前端据此更新取消按钮等 UI
                 await self._broker.publish(persisted)
+            # Phase 7: 群聊模式下检测代码块，落盘并广播 code.summary 事件
+            if execution_succeeded and content:
+                try:
+                    full_content = "".join(content)
+                    code_blocks = extract_code_blocks(full_content)
+                    # 只有代码类 Agent（生成/审查/测试）才触发代码汇总
+                    code_capabilities = {
+                        AgentCapability.CODE_GENERATION,
+                        AgentCapability.CODE_REVIEW,
+                        AgentCapability.TESTING,
+                    }
+                    agent_caps = set(
+                        agent.capabilities or []
+                    )
+                    is_code_agent = bool(
+                        agent_caps & code_capabilities
+                    )
+                    if (
+                        code_blocks
+                        and execution.conversation_id is not None
+                        and is_code_agent
+                    ):
+                        async with self._sessions() as session, session.begin():
+                            conv = await session.get(
+                                Conversation, execution.conversation_id
+                            )
+                            if (
+                                conv is not None
+                                and conv.conversation_type == ConversationType.GROUP
+                            ):
+                                # Agent 回复消息保持完整原始内容（思考+代码块），
+                                # 不再剥离代码块——前端负责流式截断和面板解析。
+                                # 历史消息保留代码块供刷新后前端重建代码汇总面板。
+                                files_data: list[dict[str, object]] = []
+                                for block in code_blocks:
+                                    if block.file_path is None:
+                                        continue
+                                    safe = _safe_resolve_path(
+                                        block.file_path, project.root_path
+                                    )
+                                    if safe is None:
+                                        continue
+                                    abs_path = Path(project.root_path) / safe
+                                    try:
+                                        original = abs_path.read_text(
+                                            encoding="utf-8"
+                                        )
+                                    except (FileNotFoundError, OSError):
+                                        original = ""
+                                    # 直接落盘写入文件
+                                    abs_path.parent.mkdir(
+                                        parents=True, exist_ok=True
+                                    )
+                                    abs_path.write_text(
+                                        block.content, encoding="utf-8"
+                                    )
+                                    diff = compute_unified_diff(
+                                        original, block.content, str(safe)
+                                    )
+                                    added_lines, deleted_lines = (
+                                        _parse_diff_line_numbers(
+                                            diff.unified_diff
+                                        )
+                                    )
+                                    is_new = original == ""
+                                    files_data.append({
+                                        "path": str(safe),
+                                        "language": block.language or "",
+                                        "content": block.content,
+                                        "original_content": original,
+                                        "is_new_file": is_new,
+                                        "is_modified": (
+                                            not is_new
+                                            and bool(diff.unified_diff)
+                                        ),
+                                        "diff": diff.unified_diff,
+                                        "added_lines": [] if is_new else added_lines,
+                                        "deleted_lines": [] if is_new else deleted_lines,
+                                    })
+                                if files_data:
+                                    # 查询该会话是否已有过代码生成（用于判断是否首次生成）
+                                    existing_summary = await session.scalar(
+                                        select(ExecutionEvent)
+                                        .where(
+                                            ExecutionEvent.conversation_id
+                                            == execution.conversation_id,
+                                            ExecutionEvent.event_type
+                                            == "code.summary",
+                                        )
+                                        .limit(1)
+                                    )
+                                    is_first_gen = (
+                                        existing_summary is None
+                                    )
+                                    next_seq = execution.sequence + 1
+                                    envelope = EventEnvelope(
+                                        event_id=uuid.uuid4(),
+                                        conversation_id=execution.conversation_id,
+                                        execution_id=execution.id,
+                                        sequence=next_seq,
+                                        type="code.summary",
+                                        timestamp=datetime.now(
+                                            UTC
+                                        ).replace(microsecond=0),
+                                        payload={
+                                            "execution_id": str(execution.id),
+                                            "agent_name": agent.name,
+                                            "is_first_generation": is_first_gen,
+                                            "files": files_data,
+                                        },
+                                    )
+                                    await self._broker.publish(envelope)
+                except Exception:
+                    # 代码汇总失败不应影响主流程
+                    pass
         except Exception:
             # Adapter exception - use safe failure
             await self._persist_safe_failure(execution_id)

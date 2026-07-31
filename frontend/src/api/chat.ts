@@ -29,6 +29,27 @@ export type RealtimeEvent = AgentEvent extends infer Event
     : never
   : never
 
+/** Phase 7: 代码汇总事件中单个文件的信息 */
+export interface CodeSummaryFile {
+  path: string
+  language: string
+  content: string
+  original_content: string
+  is_new_file: boolean
+  is_modified: boolean
+  diff: string
+  added_lines: number[]
+  deleted_lines: number[]
+}
+
+/** Phase 7: 代码汇总 WebSocket 事件 payload */
+export interface CodeSummaryPayload {
+  execution_id: string
+  agent_name: string
+  is_first_generation: boolean
+  files: CodeSummaryFile[]
+}
+
 const STORAGE_KEY = 'agenthub_project_id'
 
 function getStoredProjectId(): string | null {
@@ -211,3 +232,5 @@ export function buildWebSocketUrl(
   })
   return `${protocol}//${window.location.host}/ws/conversations/${conversationId}?${params.toString()}`
 }
+
+

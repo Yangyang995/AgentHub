@@ -118,7 +118,9 @@ def create_app(
         application.state.agent_service = AgentService(factory)
         application.state.project_service = ProjectService(factory)
         application.state.chat_service = ChatService(
-            factory, broker, adapter_resolver or _default_adapter_resolver(resolved_settings)
+            factory,
+            broker,
+            adapter_resolver or _default_adapter_resolver(resolved_settings),
         )
     application.include_router(health_router)
     application.include_router(projects_router)
