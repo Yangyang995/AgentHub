@@ -11,6 +11,8 @@ import {
   Send,
   Trash2,
   X,
+  Database,
+  Upload,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -34,6 +36,8 @@ import {
 } from '../api/chat'
 import { ConnectionStatus } from '../components/connection-status'
 import { CodeSummaryPanel } from '../components/code-summary-panel'
+import { KnowledgePanel } from '../components/knowledge-panel'
+import { uploadKnowledgeFiles } from '../api/knowledge'
 import { MarkdownContent } from '../components/markdown-content'
 import { useConversationEvents } from '../hooks/use-conversation-events'
 
@@ -87,6 +91,7 @@ function saveCodeSummaries(conversationId: string, data: Map<string, { agentName
 export function WorkbenchPage() {
   const queryClient = useQueryClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [knowledgePanelOpen, setKnowledgePanelOpen] = useState(false)
   const [newConversationOpen, setNewConversationOpen] = useState(false)
   const [conversationMode, setConversationMode] = useState<'direct' | 'group'>('direct')
   const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
@@ -97,10 +102,50 @@ export function WorkbenchPage() {
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
   const [codeSummaryByExecution, setCodeSummaryByExecution] = useState<Map<string, { agentName: string; files: import('../api/chat').CodeSummaryFile[]; isFirstGeneration: boolean }>>(() => loadCodeSummaries(activeConversationId))
   const [createError, setCreateError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ type: string; message: string } | null>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploading(true)
+    try {
+      const results = await uploadKnowledgeFiles(workspaceConfig.projectId, Array.from(files))
+      const created = results.filter(r => r.chunks_created > 0)
+      const skipped = results.filter(r => r.chunks_created === 0 && r.chunks_skipped > 0)
+      const failed = results.filter(r => r.chunks_created === 0 && r.chunks_skipped === 0)
+      const parts: string[] = []
+      if (created.length > 0) parts.push(created.length + ' 个文件上传成功')
+      if (skipped.length > 0) parts.push(skipped.length + ' 个文件已存在，已跳过')
+      if (failed.length > 0) parts.push(failed.length + ' 个文件上传失败')
+      if (parts.length > 0) {
+        const isError = failed.length > 0 && created.length === 0
+        setToast({ type: isError ? 'error' : 'success', message: parts.join('，') })
+        if (failed.length > 0) {
+          setCreateError(failed.map(r => r.file_name + ': ' + r.warnings.join(', ')).join('; '))
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ['knowledge-files', workspaceConfig.projectId] })
+    } catch (err) {
+      setToast({ type: 'error', message: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const [projectReady, setProjectReady] = useState(false)
+
+  // toast 自动消失（5秒）
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   // 启动时自动初始化项目（创建默认工作区并播种 6 个预设 Agent）
   useEffect(() => {
@@ -427,9 +472,21 @@ export function WorkbenchPage() {
             </div>
           ))}
         </nav>
-        <footer className="sidebar-footer"><ConnectionStatus state={connection} /><span>Phase 6</span></footer>
+        <div className="sidebar-section">
+          <span className="section-label">知识库</span>
+          <button className="icon-button" type="button" aria-label="打开知识库" title="打开知识库" onClick={() => { setKnowledgePanelOpen(true) }}>
+            <Database aria-hidden="true" size={18} />
+          </button>
+        </div>
+        <footer className="sidebar-footer"><ConnectionStatus state={connection} /><span>Phase 8</span></footer>
       </aside>
 
+      {toast ? (
+        <div className={'toast toast--' + toast.type} role="alert" onClick={() => setToast(null)}>
+          <span>{toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'}</span>
+          {' '}{toast.message}
+        </div>
+      ) : null}
       <main className="workspace-main">
         <header className="workspace-toolbar">
           <div><span className="toolbar-context">{activeConversation && isGroupConversation(activeConversation) ? '群聊工作区' : '单聊工作区'}</span><h1>{activeConversation?.title ?? (activeConversation ? '新对话' : '选择会话')}</h1></div>
@@ -484,6 +541,10 @@ export function WorkbenchPage() {
                 {mentionSuggestions.length > 0 ? <div className="mention-suggestions" role="listbox" aria-label="@Agent 建议">{mentionSuggestions.map((agent) => <button type="button" role="option" aria-selected="false" key={agent.id} onMouseDown={(event) => { event.preventDefault(); insertMention(agent.name) }}><Bot aria-hidden="true" size={14} /><span>{agent.name}</span><small>{agent.agent_type}</small></button>)}</div> : null}
               </div>
               <div className="composer-toolbar">
+                <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.docx,.xlsx,.xls,.csv,.html,.htm,.md,.txt,.log,.json,.yaml,.yml,.toml,.py,.ts,.tsx,.js,.jsx,.rs,.go,.java,.css,.scss,.less" />
+                <button className="icon-button" type="button" title="上传文件到知识库" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                  <Upload aria-hidden="true" size={16} />
+                </button>
                 <div className="agent-select"><Bot aria-hidden="true" size={14} /><span>{activeConversation && isGroupConversation(activeConversation) ? `${String(activeConversation.participants.length)} 位参与者` : activeConversation?.agent_name ?? 'Agent'}</span></div>
                 <div className="composer-actions">
                   {cancellableExecution ? <button className="secondary-button" type="button" disabled={cancelMutation.isPending} onClick={() => { cancelMutation.mutate(cancellableExecution.executionId); }}><CircleStop aria-hidden="true" size={16} />取消</button> : null}
@@ -493,6 +554,14 @@ export function WorkbenchPage() {
             </form>
           </section>
         )}
+      {knowledgePanelOpen ? (
+        <>
+          <div className="panel-backdrop" onClick={() => setKnowledgePanelOpen(false)} />
+          <aside className="right-panel">
+            <KnowledgePanel projectId={workspaceConfig.projectId} onClose={() => setKnowledgePanelOpen(false)} onToast={(type, msg) => setToast({ type, message: msg })} />
+          </aside>
+        </>
+      ) : null}
       </main>
     </div>
   )

@@ -1,4 +1,4 @@
-﻿"""AgentHub FastAPI 应用入口。"""
+"""AgentHub FastAPI 应用入口。"""
 
 import asyncio
 from collections.abc import Callable
@@ -19,6 +19,8 @@ from agenthub.adapters import (
     OpenAICompatibleAdapter,
 )
 from agenthub.api.routes.agents import router as agents_router
+from agenthub.api.routes.knowledge import router as knowledge_router
+from agenthub.api.routes.memories import router as memories_router
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.chat import websocket_router
 from agenthub.api.routes.health import router as health_router
@@ -125,6 +127,8 @@ def create_app(
     application.include_router(health_router)
     application.include_router(projects_router)
     application.include_router(agents_router)
+    application.include_router(knowledge_router)
+    application.include_router(memories_router)
     application.include_router(chat_router)
     application.include_router(websocket_router)
 

@@ -462,6 +462,748 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/knowledge/upload": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Upload Files",
+        "description": "上传文件到知识库——异步清洗、分块、向量化、存储。\n\n支持 PDF/DOCX/XLSX/CSV/HTML/MD/TXT 及代码文件。\n图片和二进制文件会被跳过并返回警告。",
+        "operationId": "upload_files_api_v1_projects__project_id__knowledge_upload_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_files_api_v1_projects__project_id__knowledge_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IngestResponse"
+                  },
+                  "title": "Response Upload Files Api V1 Projects  Project Id  Knowledge Upload Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/knowledge/files": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Files",
+        "description": "列出项目已索引文件。",
+        "operationId": "list_files_api_v1_projects__project_id__knowledge_files_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileInfo"
+                  },
+                  "title": "Response List Files Api V1 Projects  Project Id  Knowledge Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/knowledge/files/{file_id}": {
+      "delete": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Delete File",
+        "description": "删除文件及其所有分块和向量数据。",
+        "operationId": "delete_file_api_v1_projects__project_id__knowledge_files__file_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/knowledge/search/quick": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Quick Search",
+        "description": "快速模糊搜索——纯 pg_trgm，毫秒级，供知识库面板使用。\n\n同时匹配文档内容和文件名，按相似度排序。\n不做向量检索、Query 扩写或 LLM 重排。",
+        "operationId": "quick_search_api_v1_projects__project_id__knowledge_search_quick_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "top_k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Top K"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FuzzySearchItem"
+                  },
+                  "title": "Response Quick Search Api V1 Projects  Project Id  Knowledge Search Quick Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/knowledge/search": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Search Knowledge",
+        "description": "检索知识库——Query 扩写 + 混合检索 + RRF 融合 + LLM 重排。",
+        "operationId": "search_knowledge_api_v1_projects__project_id__knowledge_search_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "top_k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Top K"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/summaries": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "List Summaries",
+        "description": "获取会话的摘要列表（按时间排序）。",
+        "operationId": "list_summaries_api_v1_projects__project_id__conversations__conversation_id__summaries_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SummaryResponse"
+                  },
+                  "title": "Response List Summaries Api V1 Projects  Project Id  Conversations  Conversation Id  Summaries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/summarize": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Trigger Summarize",
+        "description": "手动触发会话摘要生成（全量合并版本）。",
+        "operationId": "trigger_summarize_api_v1_projects__project_id__conversations__conversation_id__summarize_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/preferences": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "List Preferences",
+        "description": "列出项目活跃偏好。",
+        "operationId": "list_preferences_api_v1_projects__project_id__preferences_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PreferenceResponse"
+                  },
+                  "title": "Response List Preferences Api V1 Projects  Project Id  Preferences Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Create Preference",
+        "description": "创建偏好——含冲突检测。",
+        "operationId": "create_preference_api_v1_projects__project_id__preferences_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/preferences/{preference_id}": {
+      "patch": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Update Preference",
+        "description": "更新偏好值或重要性。",
+        "operationId": "update_preference_api_v1_projects__project_id__preferences__preference_id__patch",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Preference Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Delete Preference",
+        "description": "软删除偏好。",
+        "operationId": "delete_preference_api_v1_projects__project_id__preferences__preference_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Preference Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/preferences/conflicts": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "List Conflicts",
+        "description": "列出冲突标记的偏好。",
+        "operationId": "list_conflicts_api_v1_projects__project_id__preferences_conflicts_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConflictResponse"
+                  },
+                  "title": "Response List Conflicts Api V1 Projects  Project Id  Preferences Conflicts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/preferences/{preference_id}/resolve-conflict": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Resolve Conflict",
+        "description": "手动解决冲突——keep=True 保留，False 软删除。",
+        "operationId": "resolve_conflict_api_v1_projects__project_id__preferences__preference_id__resolve_conflict_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "preference_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Preference Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Resolve Conflict Api V1 Projects  Project Id  Preferences  Preference Id  Resolve Conflict Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/conversations": {
       "post": {
         "tags": [
@@ -1185,6 +1927,63 @@
         "title": "AgentUpdate",
         "description": "更新 Agent 请求。"
       },
+      "Body_upload_files_api_v1_projects__project_id__knowledge_upload_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_upload_files_api_v1_projects__project_id__knowledge_upload_post"
+      },
+      "ConflictResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "importance": {
+            "type": "number",
+            "title": "Importance"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "key",
+          "value",
+          "importance",
+          "created_at"
+        ],
+        "title": "ConflictResponse",
+        "description": "冲突条目响应。"
+      },
       "ConversationCreate": {
         "properties": {
           "title": {
@@ -1398,6 +2197,25 @@
         "title": "ConversationType",
         "description": "会话类型：一对一私聊或群聊。"
       },
+      "DeleteResponse": {
+        "properties": {
+          "deleted_chunks": {
+            "type": "integer",
+            "title": "Deleted Chunks"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_chunks",
+          "message"
+        ],
+        "title": "DeleteResponse",
+        "description": "删除响应。"
+      },
       "ExecutionStatus": {
         "type": "string",
         "enum": [
@@ -1409,6 +2227,85 @@
         ],
         "title": "ExecutionStatus",
         "description": "Agent 执行生命周期状态。"
+      },
+      "FileInfo": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count"
+          },
+          "ingested_at": {
+            "type": "string",
+            "title": "Ingested At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "file_name",
+          "file_type",
+          "chunk_count",
+          "ingested_at"
+        ],
+        "title": "FileInfo",
+        "description": "已索引文件信息。"
+      },
+      "FuzzySearchItem": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chunk Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "file_name",
+          "file_type",
+          "file_id",
+          "chunk_index",
+          "content",
+          "score"
+        ],
+        "title": "FuzzySearchItem",
+        "description": "轻量模糊搜索结果项——文件名匹配优先。"
       },
       "GroupConversationResponse": {
         "properties": {
@@ -1512,6 +2409,42 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "IngestResponse": {
+        "properties": {
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunks_created": {
+            "type": "integer",
+            "title": "Chunks Created"
+          },
+          "chunks_skipped": {
+            "type": "integer",
+            "title": "Chunks Skipped"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_name",
+          "file_id",
+          "chunks_created",
+          "chunks_skipped"
+        ],
+        "title": "IngestResponse",
+        "description": "摄入结果响应。"
+      },
       "LiveHealthResponse": {
         "properties": {
           "status": {
@@ -1531,6 +2464,21 @@
         ],
         "title": "LiveHealthResponse",
         "description": "进程存活检查的稳定响应。"
+      },
+      "ManualResolveRequest": {
+        "properties": {
+          "keep": {
+            "type": "boolean",
+            "title": "Keep",
+            "description": "True 保留，False 软删除"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keep"
+        ],
+        "title": "ManualResolveRequest",
+        "description": "手动冲突解决请求。"
       },
       "MessageResponse": {
         "properties": {
@@ -1636,6 +2584,138 @@
         ],
         "title": "MessageSubmissionResponse",
         "description": "原子创建的用户消息和待执行记录。"
+      },
+      "PreferenceCreate": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Category"
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Key"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "default": 0.5
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "key",
+          "value"
+        ],
+        "title": "PreferenceCreate",
+        "description": "创建偏好请求。"
+      },
+      "PreferenceResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "importance": {
+            "type": "number",
+            "title": "Importance"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "conflict_flag": {
+            "type": "boolean",
+            "title": "Conflict Flag"
+          },
+          "previous_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "key",
+          "value",
+          "importance",
+          "is_active",
+          "conflict_flag",
+          "previous_version_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PreferenceResponse",
+        "description": "偏好响应。"
+      },
+      "PreferenceUpdate": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          }
+        },
+        "type": "object",
+        "title": "PreferenceUpdate",
+        "description": "更新偏好请求。"
       },
       "ProjectCreate": {
         "properties": {
@@ -1787,6 +2867,126 @@
         ],
         "title": "ReadyHealthResponse",
         "description": "Phase 1 应用就绪检查的稳定响应。"
+      },
+      "SearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "expanded_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expanded Queries"
+          },
+          "used_expansion": {
+            "type": "boolean",
+            "title": "Used Expansion"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "expanded_queries",
+          "used_expansion",
+          "total"
+        ],
+        "title": "SearchResponse",
+        "description": "检索响应。"
+      },
+      "SearchResultItem": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chunk Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "file_name",
+          "file_type",
+          "file_id",
+          "chunk_index",
+          "content",
+          "score"
+        ],
+        "title": "SearchResultItem",
+        "description": "检索结果项。"
+      },
+      "SummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "round_start": {
+            "type": "integer",
+            "title": "Round Start"
+          },
+          "round_end": {
+            "type": "integer",
+            "title": "Round End"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "is_full_merge": {
+            "type": "boolean",
+            "title": "Is Full Merge"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "round_start",
+          "round_end",
+          "summary",
+          "is_full_merge",
+          "created_at"
+        ],
+        "title": "SummaryResponse",
+        "description": "会话摘要响应。"
       },
       "UserMessageCreate": {
         "properties": {

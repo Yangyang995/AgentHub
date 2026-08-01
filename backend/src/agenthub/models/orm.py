@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import Float
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -91,6 +92,9 @@ class Project(Base):
     approvals: Mapped[list["Approval"]] = relationship(back_populates="project")
     deployments: Mapped[list["Deployment"]] = relationship(back_populates="project")
     usage_events: Mapped[list["UsageEvent"]] = relationship(back_populates="project")
+    knowledge_documents: Mapped[list["KnowledgeDocument"]] = relationship(back_populates="project")
+    conversation_summaries: Mapped[list["ConversationSummary"]] = relationship(back_populates="project")
+    user_preferences: Mapped[list["UserPreference"]] = relationship(back_populates="project")
 
 
 # ── Agent ──────────────────────────────────────────────────────────────────
@@ -204,6 +208,7 @@ class Conversation(Base):
     )
     executions: Mapped[list["AgentExecution"]] = relationship(back_populates="conversation")
     tasks: Mapped[list["Task"]] = relationship(back_populates="conversation")
+    summaries: Mapped[list["ConversationSummary"]] = relationship(back_populates="conversation")
     participants: Mapped[list["ConversationParticipant"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
@@ -742,4 +747,182 @@ class UsageEvent(Base):
     __table_args__ = (
         Index("ix_usage_events_project_agent_time", "project_id", "agent_id", "created_at"),
         Index("ix_usage_events_execution_time", "execution_id", "created_at"),
+    )
+
+# ── Phase 8: KnowledgeDocument ──────────────────────────────────────────────────
+
+
+class KnowledgeDocument(Base):
+    """知识库文档分块——清洗后的文本块与BGE-M3向量嵌入。
+
+    同一文件的多个分块共享 file_id，通过 chunk_index 排序。
+    content_hash 用于去重，同一内容不重复向量化。
+    """
+
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_new_uuid)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="项目隔离——检索时必须限定 project_id",
+    )
+    file_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True, comment="同一文件所有块共享此ID"
+    )
+    file_name: Mapped[str] = mapped_column(
+        String(512), nullable=False, comment="原始文件名"
+    )
+    file_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="文件类型：pdf/docx/xlsx/csv/md/py/ts/html/txt"
+    )
+    chunk_index: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="分块序号，从0开始"
+    )
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="清洗后的文本内容"
+    )
+    content_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, comment="SHA-256，用于去重"
+    )
+    chunk_metadata: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True, comment="元数据：行号范围、页码、标题路径等"
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(
+        ARRAY(Float), nullable=True, comment='BGE-M3 1024维向量嵌入'
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    # 关系
+    project: Mapped["Project"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "content_hash", name="uq_kd_project_content_hash"),
+        Index("ix_kd_project_id", "project_id"),
+        Index("ix_kd_file_id", "file_id"),
+    )
+
+
+# ── Phase 8: ConversationSummary ────────────────────────────────────────────────
+
+
+class ConversationSummary(Base):
+    """第二层：会话摘要记忆。
+
+    每轮递增摘要，每10轮全量合并校准并生成向量。
+    conversation_id 限制保证会话隔离——会话B无法检索到会话A的摘要。
+    """
+
+    __tablename__ = "conversation_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_new_uuid)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="会话隔离——仅本会话可检索",
+    )
+    round_start: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="覆盖的消息轮次起始"
+    )
+    round_end: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="覆盖的消息轮次结束"
+    )
+    summary: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="压缩摘要文本"
+    )
+    is_full_merge: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        comment="是否为每10轮全量合并校准版本——仅此版本存储向量",
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(
+        ARRAY(Float), nullable=True, comment='BGE-M3 1024维向量嵌入（仅全量合并版本存储）'
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    # 关系
+    project: Mapped["Project"] = relationship()
+    conversation: Mapped["Conversation"] = relationship()
+
+    __table_args__ = (
+        Index("ix_cs_conversation_id", "conversation_id"),
+    )
+
+
+# ── Phase 8: UserPreference ─────────────────────────────────────────────────────
+
+
+class UserPreference(Base):
+    """第三层：跨会话长期偏好记忆。
+
+    存储用户的技术偏好、架构决策和领域知识，跨所有会话共享。
+    软删除 + 版本链 + 冲突标记支持完整的冲突解决和遗忘策略。
+    """
+
+    __tablename__ = "user_preferences"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_new_uuid)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="preference / decision / knowledge"
+    )
+    key: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="偏好标识，如 tech_stack、code_style"
+    )
+    value: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="偏好值"
+    )
+    importance: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.5, comment="重要性评分 0.0-1.0"
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(
+        ARRAY(Float), nullable=True, comment="BGE-M3 1024?????"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, comment="软删除/归档标记"
+    )
+    previous_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, comment="冲突解决：指向被替换的旧版本"
+    )
+    conflict_flag: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="存在矛盾版本标记"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+    )
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow,
+        comment="最近一次被检索命中的时间"
+    )
+
+    # 关系
+    project: Mapped["Project"] = relationship()
+
+    __table_args__ = (
+        Index("ix_up_project_category_active", "project_id", "category", "is_active"),
     )

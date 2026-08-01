@@ -3,11 +3,15 @@
 from agenthub.api.routes.agents import router as agents_router
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.health import router as health_router
+from agenthub.api.routes.knowledge import router as knowledge_router
+from agenthub.api.routes.memories import router as memories_router
 from agenthub.api.routes.projects import router as projects_router
 
 __all__ = [
     "agents_router",
     "chat_router",
     "health_router",
+    "knowledge_router",
+    "memories_router",
     "projects_router",
 ]

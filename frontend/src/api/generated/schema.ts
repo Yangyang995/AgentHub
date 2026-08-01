@@ -146,6 +146,240 @@ export interface paths {
         patch: operations["update_agent_api_v1_projects__project_id__agents__agent_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/knowledge/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Files
+         * @description 上传文件到知识库——异步清洗、分块、向量化、存储。
+         *
+         *     支持 PDF/DOCX/XLSX/CSV/HTML/MD/TXT 及代码文件。
+         *     图片和二进制文件会被跳过并返回警告。
+         */
+        post: operations["upload_files_api_v1_projects__project_id__knowledge_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/knowledge/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Files
+         * @description 列出项目已索引文件。
+         */
+        get: operations["list_files_api_v1_projects__project_id__knowledge_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/knowledge/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete File
+         * @description 删除文件及其所有分块和向量数据。
+         */
+        delete: operations["delete_file_api_v1_projects__project_id__knowledge_files__file_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/knowledge/search/quick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quick Search
+         * @description 快速模糊搜索——纯 pg_trgm，毫秒级，供知识库面板使用。
+         *
+         *     同时匹配文档内容和文件名，按相似度排序。
+         *     不做向量检索、Query 扩写或 LLM 重排。
+         */
+        get: operations["quick_search_api_v1_projects__project_id__knowledge_search_quick_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/knowledge/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Knowledge
+         * @description 检索知识库——Query 扩写 + 混合检索 + RRF 融合 + LLM 重排。
+         */
+        get: operations["search_knowledge_api_v1_projects__project_id__knowledge_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Summaries
+         * @description 获取会话的摘要列表（按时间排序）。
+         */
+        get: operations["list_summaries_api_v1_projects__project_id__conversations__conversation_id__summaries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/summarize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Summarize
+         * @description 手动触发会话摘要生成（全量合并版本）。
+         */
+        post: operations["trigger_summarize_api_v1_projects__project_id__conversations__conversation_id__summarize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Preferences
+         * @description 列出项目活跃偏好。
+         */
+        get: operations["list_preferences_api_v1_projects__project_id__preferences_get"];
+        put?: never;
+        /**
+         * Create Preference
+         * @description 创建偏好——含冲突检测。
+         */
+        post: operations["create_preference_api_v1_projects__project_id__preferences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/preferences/{preference_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Preference
+         * @description 软删除偏好。
+         */
+        delete: operations["delete_preference_api_v1_projects__project_id__preferences__preference_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Preference
+         * @description 更新偏好值或重要性。
+         */
+        patch: operations["update_preference_api_v1_projects__project_id__preferences__preference_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/preferences/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conflicts
+         * @description 列出冲突标记的偏好。
+         */
+        get: operations["list_conflicts_api_v1_projects__project_id__preferences_conflicts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/preferences/{preference_id}/resolve-conflict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Conflict
+         * @description 手动解决冲突——keep=True 保留，False 软删除。
+         */
+        post: operations["resolve_conflict_api_v1_projects__project_id__preferences__preference_id__resolve_conflict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/conversations": {
         parameters: {
             query?: never;
@@ -378,6 +612,32 @@ export interface components {
             /** Adapter Config Ref */
             adapter_config_ref?: string | null;
         };
+        /** Body_upload_files_api_v1_projects__project_id__knowledge_upload_post */
+        Body_upload_files_api_v1_projects__project_id__knowledge_upload_post: {
+            /** Files */
+            files: string[];
+        };
+        /**
+         * ConflictResponse
+         * @description 冲突条目响应。
+         */
+        ConflictResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Category */
+            category: string;
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+            /** Importance */
+            importance: number;
+            /** Created At */
+            created_at: string;
+        };
         /**
          * ConversationCreate
          * @description 创建会话请求。
@@ -462,11 +722,60 @@ export interface components {
          */
         ConversationType: "direct" | "group";
         /**
+         * DeleteResponse
+         * @description 删除响应。
+         */
+        DeleteResponse: {
+            /** Deleted Chunks */
+            deleted_chunks: number;
+            /** Message */
+            message: string;
+        };
+        /**
          * ExecutionStatus
          * @description Agent 执行生命周期状态。
          * @enum {string}
          */
         ExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * FileInfo
+         * @description 已索引文件信息。
+         */
+        FileInfo: {
+            /** File Id */
+            file_id: string;
+            /** File Name */
+            file_name: string;
+            /** File Type */
+            file_type: string;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Ingested At */
+            ingested_at: string;
+        };
+        /**
+         * FuzzySearchItem
+         * @description 轻量模糊搜索结果项——文件名匹配优先。
+         */
+        FuzzySearchItem: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** File Name */
+            file_name: string;
+            /** File Type */
+            file_type: string;
+            /** File Id */
+            file_id: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Content */
+            content: string;
+            /** Score */
+            score: number;
+        };
         /**
          * GroupConversationResponse
          * @description 群聊响应独立于既有单聊响应，避免改变 Phase 5 契约。
@@ -520,6 +829,22 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * IngestResponse
+         * @description 摄入结果响应。
+         */
+        IngestResponse: {
+            /** File Name */
+            file_name: string;
+            /** File Id */
+            file_id: string;
+            /** Chunks Created */
+            chunks_created: number;
+            /** Chunks Skipped */
+            chunks_skipped: number;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
          * LiveHealthResponse
          * @description 进程存活检查的稳定响应。
          */
@@ -532,6 +857,17 @@ export interface components {
             status: "alive";
             /** Service */
             service: string;
+        };
+        /**
+         * ManualResolveRequest
+         * @description 手动冲突解决请求。
+         */
+        ManualResolveRequest: {
+            /**
+             * Keep
+             * @description True 保留，False 软删除
+             */
+            keep: boolean;
         };
         /**
          * MessageResponse
@@ -583,6 +919,62 @@ export interface components {
         MessageSubmissionResponse: {
             message: components["schemas"]["MessageResponse"];
             execution: components["schemas"]["AgentExecutionResponse"];
+        };
+        /**
+         * PreferenceCreate
+         * @description 创建偏好请求。
+         */
+        PreferenceCreate: {
+            /** Category */
+            category: string;
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+            /**
+             * Importance
+             * @default 0.5
+             */
+            importance: number;
+        };
+        /**
+         * PreferenceResponse
+         * @description 偏好响应。
+         */
+        PreferenceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Category */
+            category: string;
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+            /** Importance */
+            importance: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Conflict Flag */
+            conflict_flag: boolean;
+            /** Previous Version Id */
+            previous_version_id: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * PreferenceUpdate
+         * @description 更新偏好请求。
+         */
+        PreferenceUpdate: {
+            /** Value */
+            value?: string | null;
+            /** Importance */
+            importance?: number | null;
         };
         /**
          * ProjectCreate
@@ -659,6 +1051,64 @@ export interface components {
             /** Service */
             service: string;
             checks: components["schemas"]["ReadyChecks"];
+        };
+        /**
+         * SearchResponse
+         * @description 检索响应。
+         */
+        SearchResponse: {
+            /** Results */
+            results: components["schemas"]["SearchResultItem"][];
+            /** Expanded Queries */
+            expanded_queries: string[];
+            /** Used Expansion */
+            used_expansion: boolean;
+            /** Total */
+            total: number;
+        };
+        /**
+         * SearchResultItem
+         * @description 检索结果项。
+         */
+        SearchResultItem: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** File Name */
+            file_name: string;
+            /** File Type */
+            file_type: string;
+            /** File Id */
+            file_id: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Content */
+            content: string;
+            /** Score */
+            score: number;
+        };
+        /**
+         * SummaryResponse
+         * @description 会话摘要响应。
+         */
+        SummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Round Start */
+            round_start: number;
+            /** Round End */
+            round_end: number;
+            /** Summary */
+            summary: string;
+            /** Is Full Merge */
+            is_full_merge: boolean;
+            /** Created At */
+            created_at: string;
         };
         /**
          * UserMessageCreate
@@ -1305,6 +1755,439 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_files_api_v1_projects__project_id__knowledge_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_files_api_v1_projects__project_id__knowledge_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_files_api_v1_projects__project_id__knowledge_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_file_api_v1_projects__project_id__knowledge_files__file_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quick_search_api_v1_projects__project_id__knowledge_search_quick_get: {
+        parameters: {
+            query: {
+                q: string;
+                top_k?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FuzzySearchItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_knowledge_api_v1_projects__project_id__knowledge_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                top_k?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_summaries_api_v1_projects__project_id__conversations__conversation_id__summaries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_summarize_api_v1_projects__project_id__conversations__conversation_id__summarize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_preferences_api_v1_projects__project_id__preferences_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_preference_api_v1_projects__project_id__preferences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_preference_api_v1_projects__project_id__preferences__preference_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preference_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_preference_api_v1_projects__project_id__preferences__preference_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preference_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conflicts_api_v1_projects__project_id__preferences_conflicts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_conflict_api_v1_projects__project_id__preferences__preference_id__resolve_conflict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preference_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
             /** @description Validation Error */

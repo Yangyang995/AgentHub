@@ -1,4 +1,4 @@
-name: agenthub
+﻿name: agenthub
 
 services:
   postgres:
@@ -21,4 +21,3 @@ services:
 
 volumes:
   agenthub-postgres-data:
-
