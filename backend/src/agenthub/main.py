@@ -44,8 +44,8 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
 
     def resolve(agent: Agent) -> AgentAdapter:
         if agent.agent_type == AgentType.MOCK:
-            # 应用默认注册的 Mock Agent 必须产生可见内容，便于验证完整聊天链路；
-            # 固定回复不回显用户输入，也不会让用户误以为它是真实模型输出。
+            # ??????? Mock Agent ????????????????????
+            # ??????????????????????????????
             return MockAdapter(
                 MockAdapterScript(
                     adapter_name=agent.name,
@@ -53,7 +53,7 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
                         MockScriptStep(
                             action="delta",
                             content=(
-                                "这是确定性 Mock Agent 回复，用于验证 AgentHub 的对话与并发链路。"
+                                "????? Mock Agent ??????? AgentHub ?????????"
                             ),
                             content_type="markdown",
                         )
@@ -62,16 +62,26 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
             )
         if agent.agent_type == AgentType.OPENAI_COMPATIBLE:
             dependencies = settings.runtime_dependencies()
-            # 根据 Agent 的能力配置加载对应 System Prompt
+            # ?? Agent ????????? System Prompt
             system_prompt: str | None = None
             if agent.adapter_config_ref is not None:
                 system_prompt = load_system_prompt(agent.adapter_config_ref)
-            return OpenAICompatibleAdapter(
-                base_url=dependencies.llm_base_url,
-                api_key=dependencies.llm_api_key,
-                model=dependencies.llm_model,
-                system_prompt=system_prompt,
-            )
+            # Adapter ????Runner ??????? Adapter ??
+            def _adapter_factory(sp: str | None = None) -> AgentAdapter:
+                return OpenAICompatibleAdapter(
+                    base_url=dependencies.llm_base_url,
+                    api_key=dependencies.llm_api_key,
+                    model=dependencies.llm_model,
+                    system_prompt=sp if sp is not None else system_prompt,
+                )
+            # ?????? Agent Runner????????
+            if agent.capabilities and agent.capabilities[0]:
+                from agenthub.agents import get_runner  # noqa: PLC0415
+                runner_cls = get_runner(agent.capabilities[0])
+                if runner_cls is not None:
+                    return runner_cls(_adapter_factory, system_prompt)
+            # Fallback: ? Runner ????? Adapter
+            return _adapter_factory()
         raise RuntimeError("Adapter is not configured")
 
     return resolve

@@ -7,7 +7,7 @@
 - 纯函数和 Schema：单元测试
 - 仓储和迁移：集成测试
 - API、WebSocket、Adapter：契约测试
-- 聊天、审批、Diff、预览：E2E 测试
+- 聊天、预览：E2E 测试
 
 ## 测试框架
 - 后端：pytest, pytest-asyncio, httpx
