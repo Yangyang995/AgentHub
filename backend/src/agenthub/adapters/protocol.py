@@ -77,7 +77,11 @@ class AgentTask(BaseModel):
     )
     context: dict[str, Any] = Field(
         default_factory=dict,
-        description="额外上下文信息（会话历史、项目元数据等）",
+        description="额",
+    )
+    max_tokens: int | None = Field(
+        default=None, ge=1,
+        description="最大输出 token 数，None 使用 Adapter 默认值（8192）",
     )
 
 

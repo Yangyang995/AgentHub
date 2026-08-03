@@ -2386,6 +2386,12 @@
             "type": "array",
             "minItems": 1,
             "title": "Executions"
+          },
+          "pipeline": {
+            "type": "boolean",
+            "title": "Pipeline",
+            "description": "@?? Pipeline ????",
+            "default": false
           }
         },
         "type": "object",

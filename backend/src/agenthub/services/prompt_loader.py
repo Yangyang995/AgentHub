@@ -29,6 +29,11 @@ _PRESET_AGENT_CONFIGS: list[dict[str, object]] = [
         "capability": "testing",
         "prompt_file": "tester.md",
     },
+    {
+        "name": "DeepSeek",
+        "capability": "deepseek",
+        "prompt_file": "deepseek.md",
+    },
 ]
 
 # 能力 → System Prompt 文本的缓存

@@ -66,6 +66,9 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
             system_prompt: str | None = None
             if agent.adapter_config_ref is not None:
                 system_prompt = load_system_prompt(agent.adapter_config_ref)
+            elif agent.name == "DeepSeek":
+                # ?? DeepSeek ????????????????? System Prompt
+                system_prompt = load_system_prompt("deepseek")
             # Adapter ????Runner ??????? Adapter ??
             def _adapter_factory(sp: str | None = None) -> AgentAdapter:
                 return OpenAICompatibleAdapter(
@@ -74,13 +77,15 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
                     model=dependencies.llm_model,
                     system_prompt=sp if sp is not None else system_prompt,
                 )
-            # ?????? Agent Runner????????
-            if agent.capabilities and agent.capabilities[0]:
+            # ?????????? Agent??Runner?DeepSeek ????????? Adapter??
+            # ??DeepSeek ??Agent???????? think-act ??
+            is_provider = agent.name == "DeepSeek"
+            if agent.capabilities and agent.capabilities[0] and not is_provider:
                 from agenthub.agents import get_runner  # noqa: PLC0415
                 runner_cls = get_runner(agent.capabilities[0])
                 if runner_cls is not None:
                     return runner_cls(_adapter_factory, system_prompt)
-            # Fallback: ? Runner ????? Adapter
+            # Fallback: ? Runner ?????????? Adapter
             return _adapter_factory()
         raise RuntimeError("Adapter is not configured")
 

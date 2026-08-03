@@ -15,6 +15,8 @@ from fastapi import (
     status,
 )
 
+from pydantic import BaseModel, Field
+
 from agenthub.schemas.domain import (
     ConversationCreate,
     ConversationResponse,
@@ -27,6 +29,12 @@ from agenthub.schemas.domain import (
 from agenthub.services.chat import ChatConflictError, ChatNotFoundError, ChatService
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}", tags=["chat"])
+
+class PipelineResumeRequest(BaseModel):
+    action: str = Field(description="accept | reject | modify")
+    feedback: str = Field(default="", description="用户修改意见")
+
+
 websocket_router = APIRouter(tags=["chat"])
 
 
@@ -131,6 +139,10 @@ async def submit_message(
         _raise_http_error(error)
     if isinstance(response, MessageSubmissionResponse):
         task = asyncio.create_task(service.run_execution(response.execution.id))
+    elif getattr(response, "pipeline", False):
+        task = asyncio.create_task(
+            service.run_pipeline([item.id for item in response.executions])
+        )
     else:
         task = asyncio.create_task(
             service.run_executions([item.id for item in response.executions])
@@ -149,6 +161,29 @@ async def cancel_execution(
     try:
         event = await service.cancel_execution(project_id, execution_id)
         return event.model_dump(mode="json")
+    except (ChatNotFoundError, ChatConflictError) as error:
+        _raise_http_error(error)
+
+
+@router.post(
+    "/conversations/{conversation_id}/pipeline/resume",
+    status_code=status.HTTP_200_OK,
+)
+async def resume_pipeline(
+    project_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    data: PipelineResumeRequest,
+    service: ChatServiceDependency,
+) -> dict[str, object]:
+    try:
+        task = asyncio.create_task(
+            service.resume_pipeline(conversation_id, data.action, data.feedback)
+        )
+        # 将 task 注册到 lifespan 管理
+        from fastapi import Request as _Request
+        # 简化：不使用 request.app.state，task 自行管理生命周期
+
+        return {"status": "resumed", "action": data.action}
     except (ChatNotFoundError, ChatConflictError) as error:
         _raise_http_error(error)
 

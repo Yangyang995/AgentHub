@@ -1034,3 +1034,44 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   cursor: pointer; opacity: 0.6; transition: opacity 0.15s;
 }
 .code-block-copy-btn:hover { opacity: 1; color: #1a1d23; background: #e8eaed; }
+
+/* 架构审批栏 */
+.approval-bar {
+  margin-top: 12px; padding: 12px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+}
+.approval-hint {
+  margin: 0 0 8px 0; font-size: 13px; color: #166534; font-weight: 500;
+}
+.approval-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.approval-btn {
+  padding: 6px 14px; font-size: 13px; font-weight: 500;
+  border-radius: 6px; border: 1px solid; cursor: pointer;
+  transition: background 0.15s;
+}
+.approval-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.approval-btn--accept {
+  color: #fff; background: #16a34a; border-color: #16a34a;
+}
+.approval-btn--accept:hover:not(:disabled) { background: #15803d; }
+.approval-btn--modify {
+  color: #2563eb; background: #eff6ff; border-color: #93c5fd;
+}
+.approval-btn--modify:hover:not(:disabled) { background: #dbeafe; }
+.approval-btn--reject {
+  color: #dc2626; background: #fef2f2; border-color: #fca5a5;
+}
+.approval-btn--reject:hover:not(:disabled) { background: #fee2e2; }
+.approval-btn--submit {
+  color: #fff; background: #7c3aed; border-color: #7c3aed;
+}
+.approval-btn--submit:hover:not(:disabled) { background: #6d28d9; }
+.approval-feedback {
+  margin-top: 8px; display: flex; flex-direction: column; gap: 8px;
+}
+.approval-feedback textarea {
+  width: 100%; padding: 8px; font-size: 13px;
+  border: 1px solid #d1d5db; border-radius: 6px; resize: vertical;
+}

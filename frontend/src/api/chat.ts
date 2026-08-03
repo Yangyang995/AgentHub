@@ -190,6 +190,17 @@ export function isGroupConversation(conversation: Conversation): conversation is
   return 'participants' in conversation
 }
 
+export function resumePipeline(
+  conversationId: string,
+  action: string,
+  feedback: string = "",
+): Promise<{ status: string; action: string }> {
+  return request(`${getBasePath()}/conversations/${conversationId}/pipeline/resume`, {
+    method: "POST",
+    body: JSON.stringify({ action, feedback }),
+  })
+}
+
 export function cancelExecution(executionId: string): Promise<RealtimeEvent> {
   return request<RealtimeEvent>(`${getBasePath()}/executions/${executionId}/cancel`, { method: 'POST' })
 }

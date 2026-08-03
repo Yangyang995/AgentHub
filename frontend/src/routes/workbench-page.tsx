@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   cancelExecution,
+  resumePipeline,
   createConversation,
   createGroupConversation,
   deleteConversation,
@@ -72,11 +73,19 @@ export function WorkbenchPage() {
   })
   const [draft, setDraft] = useState('')
   const [streams, setStreams] = useState<Record<string, StreamMessage>>({})
+  const [approvalState, setApprovalState] = useState<{
+    executionId: string
+    showFeedback: boolean
+  } | null>(null)
+  const [approvalFeedback, setApprovalFeedback] = useState("")
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false)
+  const [pipelineActive, setPipelineActive] = useState(false)
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const executionAgentMap = useRef<Map<string, string>>(new Map())
   const [uploading, setUploading] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
 
@@ -187,6 +196,19 @@ export function WorkbenchPage() {
   }
 
   function handleRealtimeEvent(event: RealtimeEvent) {
+    // 架构审批事件
+    if (event.type === "pipeline.awaiting_approval") {
+      setApprovalState({
+        executionId: event.execution_id,
+        showFeedback: false,
+      })
+      return
+    }
+    if (event.type === "pipeline.approval_resolved") {
+      setApprovalState(null)
+      setApprovalFeedback("")
+      return
+    }
     // Phase 7: ???????????????????? Schema ????
     const rawEvent = event as unknown as { type: string; execution_id: string; payload: Record<string, unknown> }
     setStreams((current) => {
@@ -194,7 +216,7 @@ export function WorkbenchPage() {
         conversationId: event.conversation_id,
         executionId: event.execution_id,
         agentId: '',
-        agentName: 'Agent',
+        agentName: executionAgentMap.current.get(event.execution_id) ?? 'Agent',
         content: '',
         status: 'pending' as const,
       }
@@ -231,6 +253,24 @@ export function WorkbenchPage() {
     selectedConversationId,
     handleRealtimeEvent,
   )
+
+  // Pipeline 激活时监控：所有流完成后自动清除
+  useEffect(() => {
+    if (!pipelineActive) return
+    const conversationStreams = Object.values(streams).filter(
+      (s) => s.conversationId === selectedConversationId,
+    )
+    if (conversationStreams.length < 4) return  // 等待四个 Agent 的流全部出现才判断完成
+    const allTerminal = conversationStreams.every(
+      (s) =>
+        s.status === "succeeded" ||
+        s.status === "failed" ||
+        s.status === "cancelled",
+    )
+    if (allTerminal) {
+      setPipelineActive(false)
+    }
+  }, [streams, pipelineActive, selectedConversationId])
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -281,7 +321,11 @@ export function WorkbenchPage() {
       })
       setStreams((current) => {
         const next = { ...current }
-        executions.forEach((execution) => {
+        // Pipeline ???????????????? WebSocket ??????
+        const isPipeline = 'pipeline' in submission && submission.pipeline === true
+        if (isPipeline) setPipelineActive(true)
+        const toInit = isPipeline ? executions.slice(0, 1) : executions
+        toInit.forEach((execution) => {
           const agent = agentsById.get(execution.agent_id)
           next[execution.id] = {
             conversationId: variables.conversationId,
@@ -292,6 +336,15 @@ export function WorkbenchPage() {
             status: current[execution.id]?.status ?? execution.status,
           }
         })
+        // Pipeline ??????? execution?agent ??? handleRealtimeEvent ??
+        if (isPipeline) {
+          executions.forEach((execution) => {
+            const agent = agentsById.get(execution.agent_id)
+            if (agent) {
+              executionAgentMap.current.set(execution.id, agent.name)
+            }
+          })
+        }
         return next
       })
       void queryClient.invalidateQueries({ queryKey: ['conversations', workspaceConfig.projectId] })
@@ -307,6 +360,22 @@ export function WorkbenchPage() {
     onSuccess: handleRealtimeEvent,
   })
 
+  async function handleApproval(action: string) {
+    if (selectedConversationId === null || approvalState === null || approvalSubmitting) return
+    setApprovalSubmitting(true)
+    try {
+      await resumePipeline(
+        selectedConversationId,
+        action,
+        action === "modify" ? approvalFeedback : "",
+      )
+    } catch {
+      // 错误由 resume API 自身处理
+    } finally {
+      setApprovalSubmitting(false)
+    }
+  }
+
   function sendCurrentDraft() {
     const content = draft.trim()
     if (content === '' || selectedConversationId === null || sendMutation.isPending) return
@@ -316,30 +385,55 @@ export function WorkbenchPage() {
 
   const visibleStreams = Object.values(streams).filter((stream) => {
     if (stream.conversationId !== selectedConversationId) return false
-    if (stream.status !== 'succeeded') return true
-    return !messages.data?.some(
-      (message) =>
-        message.role === 'agent' &&
-        message.agent_id === stream.agentId &&
-        message.content === stream.content,
-    )
+    // 已完成的 Agent 输出转为普通消息展示，不再保留流式面板
+    // 但架构审批等待中的流式面板需要保留，用于展示审批按钮
+    if (approvalState && approvalState.executionId === stream.executionId) return true
+    return stream.status !== 'succeeded'
   })
-  const cancellableExecution = visibleStreams.find(
-    (stream) => stream.status === 'pending' || stream.status === 'running',
-  )
+  const cancellableExecution = (() => {
+    const found = visibleStreams.find(
+      (stream) => stream.status === "pending" || stream.status === "running",
+    )
+    if (found) return found
+    // Pipeline 激活时，即使没有 pending/running 流，也保持取消按钮可见
+    if (pipelineActive) {
+      const anyStream = Object.values(streams).find(
+        (s) => s.conversationId === selectedConversationId,
+      )
+      if (anyStream) return anyStream
+    }
+    return null
+  })()
 
   const mentionSuggestions = useMemo(() => {
     if (activeConversation === undefined || !isGroupConversation(activeConversation)) return []
     const match = /(?:^|\s)@([^\s@]*)$/.exec(draft)
     if (match === null) return []
     const query = (match[1] ?? '').toLocaleLowerCase()
-    return activeConversation.participants.filter(
+    const agents = activeConversation.participants.filter(
       (agent) => agent.status === 'enabled' && agent.name.toLocaleLowerCase().startsWith(query),
     )
+    // @?? ????? @ ? @? ???
+    if (query === '' || '??'.startsWith(query)) {
+      agents.unshift({
+        id: '__pipeline_all__',
+        name: '@全体',
+        agent_type: 'pipeline',
+        status: 'enabled',
+        capabilities: [],
+        adapter_config_ref: null,
+      } as Agent)
+    }
+    return agents
   }, [activeConversation, draft])
 
   function insertMention(name: string) {
-    setDraft((current) => current.replace(/(?:^|\s)@[^\s@]*$/, (token) => `${token.startsWith(' ') ? ' ' : ''}@${name} `))
+    setDraft((current) => current.replace(/(?:^|\s)@[^\s@]*$/, (token) => {
+      const prefix = token.startsWith(' ') ? ' ' : ''
+      // name ?? @ ???? @??????????
+      if (name.startsWith('@')) return prefix + name + ' '
+      return prefix + '@' + name + ' '
+    }))
   }
 
   const updateScrollToBottomVisibility = useCallback(() => {
@@ -462,9 +556,38 @@ export function WorkbenchPage() {
               {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} />)}
               {visibleStreams.map((stream) => (
                 <article key={`execution-${stream.executionId}`} className="message-row message-row--agent message-row--streaming" data-status={stream.status}>
-                  <header><Bot aria-hidden="true" size={15} /><strong>{stream.agentName}</strong><span>{statusLabel(stream.status)}</span></header>
-                  {stream.content ? <MarkdownContent content={stream.content} truncateAtCodeBlock={activeConversation && isGroupConversation(activeConversation)} /> : <p className="stream-placeholder">等待内容…</p>}
+                  <header><Bot aria-hidden={true} size={15} /><strong>{stream.agentName}</strong>{approvalState && approvalState.executionId === stream.executionId ? null : <span>{statusLabel(stream.status)}</span>}</header>
+                  {stream.content ? <MarkdownContent content={stream.content} truncateAtCodeBlock={activeConversation && isGroupConversation(activeConversation)} /> : (approvalState && approvalState.executionId === stream.executionId ? null : <p className="stream-placeholder">等待内容…</p>)}
                   {stream.error ? <p className="inline-error" role="alert">{stream.error}</p> : null}
+                  {approvalState && approvalState.executionId === stream.executionId ? (
+                    <div className="approval-bar">
+                      <p className="approval-hint">架构方案已生成，请选择：</p>
+                      <div className="approval-actions">
+                        <button className="approval-btn approval-btn--accept" type="button" disabled={approvalSubmitting} onClick={() => handleApproval("accept")}>
+                          接受方案
+                        </button>
+                        <button className="approval-btn approval-btn--modify" type="button" disabled={approvalSubmitting} onClick={() => setApprovalState((prev) => prev ? { ...prev, showFeedback: !prev.showFeedback } : null)}>
+                          修改意见
+                        </button>
+                        <button className="approval-btn approval-btn--reject" type="button" disabled={approvalSubmitting} onClick={() => handleApproval("reject")}>
+                          拒绝方案
+                        </button>
+                      </div>
+                      {approvalState.showFeedback ? (
+                        <div className="approval-feedback">
+                          <textarea
+                            rows={3}
+                            placeholder="输入你的修改意见（如与架构方案冲突，以你的意见为准）"
+                            value={approvalFeedback}
+                            onChange={(e) => setApprovalFeedback(e.target.value)}
+                          />
+                          <button className="approval-btn approval-btn--submit" type="button" disabled={approvalSubmitting || approvalFeedback.trim() === ""} onClick={() => handleApproval("modify")}>
+                            提交修改意见并继续
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               ))}
 

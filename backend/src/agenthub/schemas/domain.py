@@ -206,6 +206,7 @@ class GroupMessageSubmissionResponse(BaseModel):
 
     message: "MessageResponse"
     executions: list["AgentExecutionResponse"] = Field(min_length=1)
+    pipeline: bool = Field(default=False, description="@?? Pipeline ????")
 
 
 class EventEnvelope(BaseModel):

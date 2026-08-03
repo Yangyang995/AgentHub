@@ -10,15 +10,18 @@ class TesterRunner(BaseAgentRunner):
 
     async def run(self, task: AgentTask):
         instruction = (
-            "分析以下代码的功能逻辑、关键路径和边界条件。"
-            "简要列出测试策略，不要输出测试代码。"
+            "分析对话历史中代码生成专家产出的代码，"
+            "识别其功能逻辑、关键路径和边界条件。"
+            "简要列出测试策略（测试哪些方面），不要输出任何代码。"
         )
         analysis = await self._think(task, instruction)
         if not analysis:
             analysis = "未能完成代码分析"
         messages = [{"role": "user", "content": (
             "代码分析结果：\n" + analysis + "\n\n"
-            "请根据以上分析为以下代码编写测试用例：\n" + task.message_content
+            "请为对话历史中代码生成专家产出的代码编写测试用例。\n"
+            "重要：只输出测试代码，不要重新生成或重复任何实现代码。\n"
+            "原始需求：" + task.message_content
         )}]
         async for event in self._act(task, messages):
             yield event

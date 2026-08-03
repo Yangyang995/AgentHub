@@ -820,6 +820,12 @@ export interface components {
             message: components["schemas"]["MessageResponse"];
             /** Executions */
             executions: components["schemas"]["AgentExecutionResponse"][];
+            /**
+             * Pipeline
+             * @description @?? Pipeline ????
+             * @default false
+             */
+            pipeline: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

@@ -2,7 +2,9 @@
 
 import asyncio
 import inspect
+import logging
 import re
+from langgraph.errors import GraphInterrupt
 import uuid
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
@@ -72,6 +74,8 @@ class AgentAdapter(Protocol):
 
 
 AdapterResolver = Callable[[Agent], AgentAdapter]
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -293,6 +297,8 @@ class ChatService:
         self._resolve_adapter = adapter_resolver
         self._execution_locks: dict[uuid.UUID, asyncio.Lock] = {}
         self._running_adapters: dict[uuid.UUID, AgentAdapter] = {}
+        # Pipeline 审批暂存：conversation_id -> {graph, config}
+        self._pending_pipelines: dict[uuid.UUID, dict[str, Any]] = {}
 
     async def _update_title_from_llm(
         self, project_id: uuid.UUID, conversation_id: uuid.UUID, content: str
@@ -525,9 +531,22 @@ class ChatService:
                 targets = [agent]
             else:
                 participants = await self._participant_agents(session, conversation.id)
-                targets, unknown = parse_agent_mentions(data.content, participants)
-                if unknown:
-                    raise ChatConflictError(f"未知 Agent: {', '.join(unknown)}")
+                # @?? ????? Pipeline ??????? Agent
+                pipeline_mode = bool(re.search(r"(?<![\w@])@全体(?![\w-])", data.content))
+                if pipeline_mode:
+                    # 按 pipeline 步骤顺序排序，确保 executions[0] 对应架构设计专家
+                    _pipeline_caps = ["architecture_design", "code_generation", "code_review", "testing"]
+                    _order = {cap: i for i, cap in enumerate(_pipeline_caps)}
+                    targets = sorted(
+                        participants,
+                        key=lambda a: _order.get(
+                            a.capabilities[0] if a.capabilities else "", 99
+                        ),
+                    )
+                else:
+                    targets, unknown = parse_agent_mentions(data.content, participants)
+                    if unknown:
+                        raise ChatConflictError(f"未知 Agent: {', '.join(unknown)}")
                 if not targets:
                     # LLM routing via _route_via_llm
                     from agenthub.core.config import get_settings
@@ -535,10 +554,10 @@ class ChatService:
                     _d = _s.runtime_dependencies()
                     targets = await _route_via_llm(data.content, participants, _d.llm_api_key.get_secret_value(), _d.llm_base_url, _d.llm_model)
                     if not targets:
-                        # LLM 无法判断时兜底：提示用户手动 @Agent
+                        # LLM ?????????????? @Agent
                         agent_names = chr(0x3001).join(a.name for a in participants)
                         raise ChatConflictError(
-                            f"无法自动判断应由哪个 Agent 处理，请 @Agent 指定。可选：{agent_names}"
+                            f"?????????? Agent ???? @Agent ??????{agent_names}"
                         )
             disabled = [agent.name for agent in targets if agent.status != AgentStatus.ENABLED]
             if disabled:
@@ -589,6 +608,7 @@ class ChatService:
                 response = GroupMessageSubmissionResponse(
                     message=MessageResponse.model_validate(message),
                     executions=[AgentExecutionResponse.model_validate(item) for item in executions],
+                    pipeline=pipeline_mode,
                 )
         return response
 
@@ -618,6 +638,7 @@ class ChatService:
             # 执行已在 submit_message 中创建为 PENDING，此处通过 Adapter 事件流转到 RUNNING
             adapter = self._resolve_adapter(agent)
             self._running_adapters[execution_id] = adapter
+            logger.info("Pipeline step adapter ready: agent=%s", agent.name)
             async with self._sessions() as session:
                 message_rows = await session.scalars(
                     select(Message)
@@ -793,6 +814,270 @@ class ChatService:
         finally:
             self._running_adapters.pop(execution_id, None)
             await self._refresh_conversation_status(execution.message_id)
+
+    # ---- Pipeline ?? ----
+
+    async def resume_pipeline(
+        self, conversation_id: uuid.UUID, action: str, feedback: str = ""
+    ) -> None:
+        """恢复被架构审批中断的 Pipeline。
+
+        Args:
+            conversation_id: 会话 ID
+            action: "accept" | "reject" | "modify"
+            feedback: 用户修改意见（action="modify" 时有效）
+        """
+        from agenthub.orchestrator.graph import build_pipeline_graph, run_pipeline as _run_graph
+        from langgraph.types import Command
+
+        pending = self._pending_pipelines.pop(conversation_id, None)
+        if pending is None:
+            raise RuntimeError("No pending pipeline for this conversation")
+
+        graph = pending["graph"]
+        config = pending["config"]
+
+        logger.info(
+            "Pipeline resume: conversation=%s, action=%s", conversation_id, action
+        )
+
+        # 通过 WebSocket 发送用户决策事件
+        decision_envelope = EventEnvelope(
+            event_id=uuid.uuid4(),
+            conversation_id=conversation_id,
+            execution_id=uuid.uuid4(),
+            sequence=0,
+            type="pipeline.approval_resolved",
+            timestamp=_utcnow(),
+            payload={"action": action, "feedback": feedback},
+        )
+        await self._broker.publish(decision_envelope)
+
+        try:
+            final_state = await graph.ainvoke(
+                Command(resume={"action": action, "feedback": feedback}),
+                config,
+            )
+            agent_status = final_state.get("agent_status", {})
+            succeeded = sum(1 for s in agent_status.values() if s == "succeeded")
+            failed = sum(1 for s in agent_status.values() if s == "failed")
+            logger.info(
+                "Pipeline resumed & completed: conversation=%s, succeeded=%d, failed=%d, error=%s",
+                conversation_id, succeeded, failed, final_state.get("error"),
+            )
+        except Exception:
+            logger.exception("Pipeline resume failed: conversation=%s", conversation_id)
+            await self._finalize_pipeline(conversation_id, {})
+            raise
+
+    async def _run_pipeline_step(
+        self, execution_id: uuid.UUID, extra_context: list[dict[str, str]] | None = None
+    ) -> str:
+        """Pipeline ????????? Agent ?????????
+
+        ? run_execution ??????
+        - ?? extra_context ???? Agent ????????
+        - ?????????????????? WebSocket?
+        - ??? _refresh_conversation_status?? _finalize_pipeline ?????
+
+        Args:
+            execution_id: Agent ???? ID
+            extra_context: ?? Agent ?????????????????
+
+        Returns:
+            Agent ???????
+
+        Raises:
+            ?????????????? LangGraph ?????
+        """
+        extra_context = extra_context or []
+        async with self._sessions() as session:
+            row = await session.execute(
+                select(AgentExecution, Agent, Message, Project)
+                .join(Agent, Agent.id == AgentExecution.agent_id)
+                .join(Message, Message.id == AgentExecution.message_id)
+                .join(Project, Project.id == AgentExecution.project_id)
+                .where(AgentExecution.id == execution_id)
+            )
+            record = row.one_or_none()
+        if record is None:
+            raise RuntimeError(f"Execution not found: {execution_id}")
+        execution, agent, message, project = record
+        try:
+            adapter = self._resolve_adapter(agent)
+            self._running_adapters[execution_id] = adapter
+            logger.info("Pipeline step adapter ready: agent=%s", agent.name)
+            # ???????????Agent???
+            async with self._sessions() as session:
+                message_rows = await session.scalars(
+                    select(Message)
+                    .where(Message.conversation_id == execution.conversation_id)
+                    .order_by(Message.sequence)
+                )
+                history = [
+                    {
+                        "role": (
+                            "assistant"
+                            if str(item.role) == MessageRole.AGENT.value
+                            else str(item.role)
+                        ),
+                        "content": item.content,
+                    }
+                    for item in message_rows
+                ]
+            # ???????????Agent??????
+            context_messages = list(history) + list(extra_context)
+            task = AgentTask(
+                execution_id=execution.id,
+                project_id=execution.project_id,
+                agent_id=execution.agent_id,
+                conversation_id=execution.conversation_id,
+                message_content=message.content,
+                working_dir=Path(project.root_path),
+                context={"messages": context_messages},
+            )
+            content: list[str] = []
+            execution_succeeded = False
+            async for event in adapter.run(task):
+                completed_content = None
+                if isinstance(event, ExecutionStatusEvent) and event.status == "succeeded":
+                    completed_content = "".join(content)
+                    execution_succeeded = True
+                persisted = await self._persist_adapter_event(
+                    execution_id, event, completed_content=completed_content
+                )
+                if persisted is None:
+                    break
+                if isinstance(event, ContentDeltaEvent):
+                    content.append(event.delta)
+                # ????? WebSocket????????
+                await self._broker.publish(persisted)
+            if not execution_succeeded:
+                raise RuntimeError(f"Agent execution failed: {execution_id}")
+            full = "".join(content)
+            logger.info("Pipeline step DONE: execution=%s, output_len=%d", execution_id, len(full))
+            return full
+        finally:
+            self._running_adapters.pop(execution_id, None)
+
+    async def _finalize_pipeline(
+        self, conversation_id: uuid.UUID, agent_status: dict[str, str]
+    ) -> None:
+        """Pipeline ????????????????
+
+        Args:
+            conversation_id: ?? ID
+            agent_status: ? Agent ???????
+        """
+        any_failed = any(s == "failed" for s in agent_status.values())
+        all_succeeded = all(s == "succeeded" for s in agent_status.values())
+        async with self._sessions() as session, session.begin():
+            conversation = await session.get(Conversation, conversation_id)
+            if conversation is not None:
+                if all_succeeded:
+                    conversation.status = ConversationStatus.SUCCEEDED
+                elif any_failed:
+                    conversation.status = ConversationStatus.PARTIAL_FAILED
+                else:
+                    conversation.status = ConversationStatus.IDLE
+                conversation.updated_at = _utcnow()
+
+    async def run_pipeline(self, execution_ids: list[uuid.UUID]) -> None:
+        """?? @?? Pipeline??? Agent ?????
+
+        ?? LangGraph StateGraph ???????? Agent ???
+        ??????????? Agent??????????? WebSocket
+        ?????
+
+        Args:
+            execution_ids: ?? Agent ????? ID ??
+                          ???[????, ????, ????, ??]
+        """
+        from agenthub.orchestrator.graph import build_pipeline_graph, run_pipeline as _run_graph
+
+        if len(execution_ids) < 4:
+            raise ValueError("Pipeline ???? 4 ? Agent ????")
+
+        # ???? execution ???????
+        async with self._sessions() as session:
+            execution = await session.get(AgentExecution, execution_ids[0])
+            if execution is None:
+                raise RuntimeError("Execution not found")
+            message = await session.get(Message, execution.message_id)
+            if message is None:
+                raise RuntimeError("Message not found")
+            conversation_id = execution.conversation_id
+            project_id = execution.project_id
+            user_message = message.content
+
+        graph = build_pipeline_graph(self)
+        try:
+            # 构建 step→execution_id 映射，按 Agent capability 而非位置匹配
+            step_execution_map: dict[str, str] = {}
+            async with self._sessions() as session:
+                for eid in execution_ids:
+                    exec_row = await session.execute(
+                        select(AgentExecution.agent_id).where(AgentExecution.id == eid)
+                    )
+                    agent_id = exec_row.scalar_one_or_none()
+                    if agent_id is None:
+                        continue
+                    agent_row = await session.execute(
+                        select(Agent.capabilities).where(Agent.id == agent_id)
+                    )
+                    caps = agent_row.scalar_one_or_none()
+                    if caps and len(caps) > 0:
+                        cap = caps[0]
+                        pipeline_caps = {"architecture_design", "code_generation", "code_review", "testing"}
+                        if cap in pipeline_caps:
+                            step_execution_map[cap] = str(eid)
+
+            config = {"configurable": {"thread_id": str(conversation_id)}}
+            final_state = await _run_graph(
+                chat_service=self,
+                execution_ids=execution_ids,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_message=user_message,
+                step_execution_map=step_execution_map if step_execution_map else None,
+            )
+
+            # LangGraph 1.2+: interrupt() ???????????? _interrupted ??
+            if final_state.get("_interrupted"):
+                logger.info("Pipeline awaiting approval: conversation=%s", conversation_id)
+                self._pending_pipelines[conversation_id] = {
+                    "graph": graph,
+                    "config": config,
+                }
+                interrupt_envelope = EventEnvelope(
+                    event_id=uuid.uuid4(),
+                    conversation_id=conversation_id,
+                    execution_id=execution_ids[0],
+                    sequence=0,
+                    type="pipeline.awaiting_approval",
+                    timestamp=_utcnow(),
+                    payload={
+                        "execution_id": str(execution_ids[0]),
+                        "message": "???????????",
+                    },
+                )
+                await self._broker.publish(interrupt_envelope)
+                return
+
+            # ???? Pipeline ????
+            agent_status = final_state.get("agent_status", {})
+            succeeded = sum(1 for s in agent_status.values() if s == "succeeded")
+            failed = sum(1 for s in agent_status.values() if s == "failed")
+            logger.info(
+                "Pipeline completed: conversation=%s, succeeded=%d, failed=%d, error=%s",
+                conversation_id, succeeded, failed, final_state.get("error"),
+            )
+        except Exception:
+            logger.exception("Pipeline execution failed: conversation=%s", conversation_id)
+            self._pending_pipelines.pop(conversation_id, None)
+            await self._finalize_pipeline(conversation_id, {})
+            raise
+
 
     async def cancel_execution(
         self, project_id: uuid.UUID, execution_id: uuid.UUID

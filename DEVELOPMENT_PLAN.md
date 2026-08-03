@@ -491,7 +491,7 @@ WebSocket 事件信封：
 
 - LLM 输出不可信，必须经过 Pydantic 校验。
 - 不重写已有 Message Pipeline、Adapter 和 Approval 契约。
-- 首次实现可先覆盖典型场景（需求 → 架构 → 代码 → 审查 → 测试 → 报告）。
+- 首次实现可先覆盖典型场景（架构 → 代码 → 审查 → 测试）。
 
 ---
 
