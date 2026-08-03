@@ -24,21 +24,21 @@ class AgentType(enum.StrEnum):
 class AgentCapability(enum.StrEnum):
     """Agent 能力声明，用于 Orchestrator 能力匹配。
 
-    与 6 个预置子 Agent 一一对应：
-    - requirement_analysis：需求分析专家
+    与 4 个预置子 Agent 一一对应：
     - architecture_design：架构设计专家
     - code_generation：代码生成专家
     - code_review：代码审查专家
     - testing：测试专家
-    - documentation：技术报告撰写专家
     """
 
-    REQUIREMENT_ANALYSIS = "requirement_analysis"
+    # 已废弃——需求分析专家已移除，保留以兼容已有数据库记录
+    REQUIREMENT_ANALYSIS = "requirement_analysis"  # deprecated
     ARCHITECTURE_DESIGN = "architecture_design"
     CODE_GENERATION = "code_generation"
     CODE_REVIEW = "code_review"
     TESTING = "testing"
-    DOCUMENTATION = "documentation"
+    # 已废弃——技术报告撰写专家已移除，保留以兼容已有数据库记录
+    DOCUMENTATION = "documentation"  # deprecated
     # 以下为历史兼容，仍可用但不作为预置 Agent 的主能力
     FILE_OPERATION = "file_operation"
     DEPLOYMENT = "deployment"

@@ -1626,7 +1626,7 @@
           "deployment"
         ],
         "title": "AgentCapability",
-        "description": "Agent 能力声明，用于 Orchestrator 能力匹配。\n\n与 6 个预置子 Agent 一一对应：\n- requirement_analysis：需求分析专家\n- architecture_design：架构设计专家\n- code_generation：代码生成专家\n- code_review：代码审查专家\n- testing：测试专家\n- documentation：技术报告撰写专家"
+        "description": "Agent 能力声明，用于 Orchestrator 能力匹配。\n\n与 4 个预置子 Agent 一一对应：\n- architecture_design：架构设计专家\n- code_generation：代码生成专家\n- code_review：代码审查专家\n- testing：测试专家"
       },
       "AgentCreate": {
         "properties": {

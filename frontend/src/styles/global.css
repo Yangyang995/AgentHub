@@ -125,7 +125,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .markdown-content > :first-child { margin-top: 0; }
 .markdown-content > :last-child { margin-bottom: 0; }
 .markdown-content p, .markdown-content ul, .markdown-content ol, .markdown-content blockquote { margin: 0.65em 0; }
-.markdown-content pre { max-width: 100%; margin: 10px 0; padding: 12px; overflow-x: auto; color: #e7ece8; background: #202421; border: 1px solid #303631; border-radius: 5px; }
+.markdown-content pre { max-width: 100%; margin: 10px 0; padding: 12px; overflow-x: auto; color: #1a1d23; background: #f5f6f8; border: 1px solid #d8dce0; border-radius: 5px; }
 .markdown-content code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.9em; }
 .markdown-content :not(pre) > code { padding: 2px 4px; background: #e8ece9; border-radius: 3px; }
 .markdown-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
@@ -367,42 +367,10 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
    Phase 7: 代码汇总面板（浅色主题）
    ═══════════════════════════════════════════════════════ */
 
-.code-summary-panel {
-  margin: 8px auto 14px;
-  width: min(100%, 880px);
-  background: #fff;
-  border: 1px solid #dce1dd;
-  border-radius: 8px;
-  overflow: hidden;
-}
 
-.code-summary-panel__toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px;
-  color: #303631;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-}
 
-.code-summary-panel__toggle:hover {
-  background: #f4f7f5;
-}
 
-.code-summary-panel__title {
-  font-weight: 600;
-  flex: 1;
-}
 
-.code-summary-panel__stats {
-  display: flex;
-  gap: 6px;
-}
 
 .tag {
   display: inline-block;
@@ -427,230 +395,47 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   background: #f0f2f1;
 }
 
-.code-summary-panel__body {
-  border-top: 1px solid #dce1dd;
-  padding: 0;
-}
 
-.code-summary-panel__toolbar {
-  display: flex;
-  gap: 6px;
-  padding: 8px 14px;
-  border-bottom: 1px solid #dce1dd;
-}
 
-.code-summary-panel__file-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 
-.code-summary-file {
-  border-bottom: 1px solid #e8ece9;
-}
 
-.code-summary-file:last-child {
-  border-bottom: none;
-}
 
-.code-summary-file__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px 14px;
-  color: #4a524d;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-}
 
-.code-summary-file__header:hover {
-  background: #f4f7f5;
-}
 
-.code-summary-file__icon {
-  flex-shrink: 0;
-  color: #579477;
-}
 
-.code-summary-file__path {
-  flex: 1;
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
-  font-size: 12px;
-  color: #282d29;
-}
 
-.code-summary-file__lang {
-  padding: 0 6px;
-  font-size: 10px;
-  color: #656d67;
-  background: #e8ece9;
-  border-radius: 3px;
-}
 
-.code-summary-file__copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  padding: 3px 8px;
-  color: #656d67;
-  background: none;
-  border: 1px solid #cbd1cd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-}
 
-.code-summary-file__copy:hover {
-  color: #282d29;
-  background: #e8ece9;
-}
 
-.code-summary-file__code {
-  border-top: 1px solid #e8ece9;
-  max-height: 360px;
-  overflow: auto;
-}
 
-.code-summary-file__content {
-  margin: 0;
-  padding: 12px 14px;
-  color: #282d29;
-  background: #f6f8f7;
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
 
-.code-summary-file__content code {
-  font-family: inherit;
-}
 
-/* Diff viewer inside code summary panel — light theme overrides */
-.code-summary-file__code .diff-viewer {
-  background: #f6f8f7;
-  color: #282d29;
-}
 
-.code-summary-file__code .diff-viewer__header {
-  background: #e8ece9;
-  color: #4a524d;
-}
 
-.code-summary-file__code .diff-viewer__filename {
-  color: #282d29;
-}
 
-.code-summary-file__code .diff-line--addition {
-  background: #dafbe1;
-}
 
-.code-summary-file__code .diff-line--deletion {
-  background: #ffebe9;
-}
 
-.code-summary-file__code .diff-line--header {
-  background: #e8ece9;
-  color: #4a524d;
-}
 
-.code-summary-file__code .diff-line__number--old {
-  background: rgb(255 129 130 / 15%);
-}
 
-.code-summary-file__code .diff-line__number--new {
-  background: rgb(79 194 100 / 15%);
-}
 
-.code-summary-file__code .diff-line--addition .diff-line__prefix {
-  color: #1a7f37;
-}
 
-.code-summary-file__code .diff-line--deletion .diff-line__prefix {
-  color: #cf222e;
-}
 
-.code-summary-file__code .diff-line--context .diff-line__prefix {
-  color: #8b949e;
-}
 
 
 /* ═══════════════════════════════════════════════════════
    行级高亮代码展示
    ═══════════════════════════════════════════════════════ */
 
-.highlighted-code {
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  background: #f6f8f7;
-}
 
-.highlighted-code__lines {
-  overflow: auto;
-}
 
-.highlighted-code__line {
-  display: flex;
-  min-height: 22px;
-}
 
-.highlighted-code__line--added {
-  background: #dafbe1;
-}
 
-.highlighted-code__line--deleted {
-  background: #ffebe9;
-}
 
-.highlighted-code__gutter {
-  flex-shrink: 0;
-  width: 42px;
-  padding: 0 8px;
-  color: #8b949e;
-  font-size: 11px;
-  text-align: right;
-  user-select: none;
-  border-right: 1px solid #e8ece9;
-}
 
-.highlighted-code__line--added .highlighted-code__gutter {
-  color: #1a7f37;
-  background: #b3e8c0;
-}
 
-.highlighted-code__line--deleted .highlighted-code__gutter {
-  color: #cf222e;
-  background: #ffcdd2;
-}
 
-.highlighted-code__text {
-  flex: 1;
-  padding: 0 10px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: #282d29;
-}
 
-.highlighted-code__text[data-noselect="true"] {
-  user-select: none;
-  color: #cf222e;
-}
 
-.highlighted-code__legend {
-  display: flex;
-  gap: 16px;
-  padding: 6px 14px;
-  font-size: 11px;
-  border-top: 1px solid #e8ece9;
-  background: #fafbfa;
-}
 
 .legend-item {
   display: inline-flex;
@@ -1237,3 +1022,15 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   from { opacity: 0; transform: translateY(-16px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* 代码块复制按钮 */
+.code-block-wrapper { position: relative; }
+.code-block-wrapper pre { padding-top: 32px; }
+.code-block-copy-btn {
+  position: absolute; top: 6px; right: 6px; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  color: #6b7280; background: transparent; border: 1px solid #d8dce0; border-radius: 4px;
+  cursor: pointer; opacity: 0.6; transition: opacity 0.15s;
+}
+.code-block-copy-btn:hover { opacity: 1; color: #1a1d23; background: #e8eaed; }

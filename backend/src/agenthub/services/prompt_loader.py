@@ -1,18 +1,14 @@
-﻿"""Agent System Prompt 加载工具。
+"""Agent System Prompt 加载工具。
 
 从 backend/prompts/agents/ 目录加载各子 Agent 的 System Prompt 文件，
 运行时一次性加载并缓存，避免重复文件 I/O。
 """
 
+import re
 from pathlib import Path
 
-# 预置 Agent 名称 → 能力 → Prompt 文件名映射
+# 预置 Agent 名称 → 能力 → Prompt 文件名映射（4 个预置子 Agent）
 _PRESET_AGENT_CONFIGS: list[dict[str, object]] = [
-    {
-        "name": "需求分析专家",
-        "capability": "requirement_analysis",
-        "prompt_file": "requirement_analyst.md",
-    },
     {
         "name": "架构设计专家",
         "capability": "architecture_design",
@@ -33,11 +29,6 @@ _PRESET_AGENT_CONFIGS: list[dict[str, object]] = [
         "capability": "testing",
         "prompt_file": "tester.md",
     },
-    {
-        "name": "技术报告撰写专家",
-        "capability": "documentation",
-        "prompt_file": "report_writer.md",
-    },
 ]
 
 # 能力 → System Prompt 文本的缓存
@@ -45,15 +36,13 @@ _capability_prompt_cache: dict[str, str] = {}
 
 
 def _discover_prompts_dir() -> Path:
-    """探測 prompts 目录位置，优先使用源码树路径，回退到当前工作目录。"""
-    # 尝试相对于本模块的位置找到源码树根
+    """探测 prompts 目录位置，优先使用源码树路径，回退到当前工作目录。"""
     current = Path(__file__).resolve().parent
     for _ in range(6):
         candidate = current / "prompts" / "agents"
         if candidate.is_dir():
             return candidate
         current = current.parent
-    # 回退：当前工作目录下的 backend/prompts/agents
     fallback = Path.cwd() / "backend" / "prompts" / "agents"
     return fallback
 
@@ -70,7 +59,6 @@ def load_system_prompt(capability: str) -> str | None:
     if capability in _capability_prompt_cache:
         return _capability_prompt_cache[capability]
 
-    # 查找能力对应的文件名
     prompt_file = None
     for config in _PRESET_AGENT_CONFIGS:
         if config["capability"] == capability:
@@ -84,7 +72,8 @@ def load_system_prompt(capability: str) -> str | None:
     file_path = prompts_dir / prompt_file
 
     try:
-        content = file_path.read_text(encoding="utf-8").strip()
+        raw = file_path.read_text(encoding="utf-8")
+        content = raw.strip()
     except (FileNotFoundError, OSError):
         return None
 

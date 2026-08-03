@@ -480,13 +480,11 @@ export interface components {
          * AgentCapability
          * @description Agent 能力声明，用于 Orchestrator 能力匹配。
          *
-         *     与 6 个预置子 Agent 一一对应：
-         *     - requirement_analysis：需求分析专家
+         *     与 4 个预置子 Agent 一一对应：
          *     - architecture_design：架构设计专家
          *     - code_generation：代码生成专家
          *     - code_review：代码审查专家
          *     - testing：测试专家
-         *     - documentation：技术报告撰写专家
          * @enum {string}
          */
         AgentCapability: "requirement_analysis" | "architecture_design" | "code_generation" | "code_review" | "testing" | "documentation" | "file_operation" | "deployment";

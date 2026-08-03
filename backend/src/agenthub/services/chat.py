@@ -78,6 +78,62 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+async def _route_via_llm(
+    content: str,
+    agents: list[Agent],
+    api_key: str,
+    base_url: str,
+    model: str,
+) -> list[Agent]:
+    """通过 LLM 判断用户消息应由哪些 Agent 处理。"""
+    from agenthub.services.prompt_loader import load_system_prompt
+    agent_lines = []
+    for agent in agents:
+        capability = agent.capabilities[0] if agent.capabilities else None
+        desc = ""
+        if capability:
+            prompt_text = load_system_prompt(capability) or ""
+            for line in prompt_text.split("\n"):
+                line = line.strip().lstrip("#").strip()
+                if line and not line.startswith("##"):
+                    desc = line
+                    break
+        agent_lines.append(f"- {agent.name}：{desc or agent.name}")
+    agents_text = "\n".join(agent_lines)
+    prompt = (
+        f"根据用户消息，判断应调用以下哪些 Agent。\n\n"
+        f"{agents_text}\n\n"
+        f"用户消息：{content}\n\n"
+        f"只输出 Agent 名称（多个用顿号分隔），不输出其他内容。若都不相关，输出无。"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10)) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 30,
+                    "temperature": 0.1,
+                },
+            )
+            if resp.status_code < 400:
+                data = resp.json()
+                result = data["choices"][0]["message"]["content"].strip()
+                selected = __import__("re").split(r"[、，,\\s]+", result)
+                selected = [s.strip() for s in selected if s.strip()]
+                matched = []
+                for name in selected:
+                    for agent in agents:
+                        if agent.name == name:
+                            matched.append(agent)
+                            break
+                if matched:
+                    return matched
+    except Exception:
+        pass
+    return []
 async def _generate_title_via_llm(content: str, api_key: str, base_url: str, model: str) -> str:
     """通过 LLM 将首条问题提炼为 10 字以内的关键词标题。"""
     prompt = (
@@ -412,16 +468,28 @@ class ChatService:
         """删除项目内历史会话；执行中会话必须先取消，避免删除流式执行上下文。"""
         async with self._sessions() as session, session.begin():
             conversation = await self._get_conversation(session, project_id, conversation_id)
-            active = await session.scalar(
+            # ???? RUNNING??????? PENDING?????????
+            running_count = await session.scalar(
                 select(func.count())
                 .select_from(AgentExecution)
                 .where(
                     AgentExecution.conversation_id == conversation.id,
-                    AgentExecution.status.in_(("pending", "running")),
+                    AgentExecution.status == "running",
                 )
             )
-            if active:
-                raise ChatConflictError("会话仍在执行，请先取消执行")
+            if running_count:
+                raise ChatConflictError("?????????????")
+            # PENDING ??? RUNNING ???????????????????
+            pending_execs = await session.scalars(
+                select(AgentExecution).where(
+                    AgentExecution.conversation_id == conversation.id,
+                    AgentExecution.status == "pending",
+                )
+            )
+            for pe in pending_execs:
+                pe.status = ExecutionStatus.FAILED
+                pe.error_message = "????????????"
+            await session.flush()
             await session.execute(delete(Conversation).where(Conversation.id == conversation.id))
 
     async def list_messages(
@@ -461,7 +529,17 @@ class ChatService:
                 if unknown:
                     raise ChatConflictError(f"未知 Agent: {', '.join(unknown)}")
                 if not targets:
-                    raise ChatConflictError("群聊消息必须显式 @至少一个参与 Agent")
+                    # LLM routing via _route_via_llm
+                    from agenthub.core.config import get_settings
+                    _s = get_settings()
+                    _d = _s.runtime_dependencies()
+                    targets = await _route_via_llm(data.content, participants, _d.llm_api_key.get_secret_value(), _d.llm_base_url, _d.llm_model)
+                    if not targets:
+                        # LLM 无法判断时兜底：提示用户手动 @Agent
+                        agent_names = chr(0x3001).join(a.name for a in participants)
+                        raise ChatConflictError(
+                            f"无法自动判断应由哪个 Agent 处理，请 @Agent 指定。可选：{agent_names}"
+                        )
             disabled = [agent.name for agent in targets if agent.status != AgentStatus.ENABLED]
             if disabled:
                 raise ChatConflictError(f"Agent 已禁用: {', '.join(disabled)}")
@@ -532,9 +610,12 @@ class ChatService:
             )
             record = row.one_or_none()
         if record is None:
+            # ???????? Agent ???????????????? PENDING
+            await self._persist_safe_failure(execution_id)
             return
         execution, agent, message, project = record
         try:
+            # 执行已在 submit_message 中创建为 PENDING，此处通过 Adapter 事件流转到 RUNNING
             adapter = self._resolve_adapter(agent)
             self._running_adapters[execution_id] = adapter
             async with self._sessions() as session:
@@ -696,8 +777,19 @@ class ChatService:
                     # 代码汇总失败不应影响主流程
                     pass
         except Exception:
-            # Adapter exception - use safe failure
-            await self._persist_safe_failure(execution_id)
+            # Adapter 异常：持久化失败状态，防止执行永远卡在 PENDING
+            try:
+                await self._persist_safe_failure(execution_id)
+            except Exception:
+                # 极端情况：_persist_safe_failure 本身也失败（如 DB 断开）
+                # 尝试最后一次直接更新状态
+                try:
+                    async with self._sessions() as session, session.begin():
+                        execution_ref = await session.get(AgentExecution, execution_id, with_for_update=True)
+                        if execution_ref is not None and execution_ref.status == ExecutionStatus.PENDING:
+                            execution_ref.status = ExecutionStatus.FAILED
+                except Exception:
+                    pass
         finally:
             self._running_adapters.pop(execution_id, None)
             await self._refresh_conversation_status(execution.message_id)

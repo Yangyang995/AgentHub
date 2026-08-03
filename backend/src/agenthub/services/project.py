@@ -1,6 +1,6 @@
 ﻿"""项目注册与预设 Agent 播种服务。
 
-项目注册时自动创建 6 个预置代码子 Agent，均绑定 OPENAI_COMPATIBLE Adapter，
+项目注册时自动创建 4 个预置代码子 Agent，均绑定 OPENAI_COMPATIBLE Adapter，
 各自加载对应的 System Prompt。Agent 名称在同一项目内唯一。
 """
 
@@ -21,13 +21,13 @@ from agenthub.services.prompt_loader import get_preset_agent_configs
 
 
 class ProjectService:
-    """项目注册与管理，注册时自动播种 6 个预置子 Agent。"""
+    """项目注册与管理，注册时自动播种 4 个预置子 Agent。"""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = session_factory
 
     async def create(self, data: ProjectCreate) -> ProjectResponse:
-        """创建项目并自动播种 6 个预置代码子 Agent。
+        """创建项目并自动播种 4 个预置代码子 Agent。
 
         整个操作为单个数据库事务：任一步骤失败则全部回滚。
         """
@@ -47,7 +47,7 @@ class ProjectService:
             session.add(project)
             await session.flush()
 
-            # 播种 6 个预置代码子 Agent
+            # 播种 4 个预置代码子 Agent
             preset_configs = get_preset_agent_configs()
             for config in preset_configs:
                 agent = Agent(
