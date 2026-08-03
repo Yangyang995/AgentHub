@@ -31,7 +31,7 @@ class SearchResult:
     score: float
 
 
-# RRF 融合常数
+# ???? 融合常数
 RRF_K = 60
 
 
@@ -159,15 +159,22 @@ class VectorStore:
         始终限定 project_id。
         """
         # vector_score: 1 - cosine_distance，映射到 [0,2] 再标准化
+        # 分别定义 SELECT 用（带 AS 别名）和 ORDER BY 用（纯表达式）
         vector_sql = (
-            "1.0 - (embedding <=> :embedding::vector) AS vector_score"
+            "1.0 - (embedding::vector <=> CAST(:embedding AS vector)) AS vector_score"
             if query_embedding is not None
             else "0.0 AS vector_score"
         )
+        vector_expr = (
+            "1.0 - (embedding::vector <=> CAST(:embedding AS vector))"
+            if query_embedding is not None
+            else "0.0"
+        )
         # trgm_score: pg_trgm similarity，范围 [0,1]
         trgm_sql = (
-            "COALESCE(similarity(content, :query_text), 0.0) AS trgm_score"
+            "COALESCE(similarity(LOWER(content), LOWER(:query_text)), 0.0) AS trgm_score"
         )
+        trgm_expr = "COALESCE(similarity(LOWER(content), LOWER(:query_text)), 0.0)"
 
         # 安全——使用参数绑定而非字符串拼接
         sql_text = f"""
@@ -183,9 +190,9 @@ class VectorStore:
               OR content % :query_text
           )
         ORDER BY (
-            COALESCE(1.0 / (60 + RANK() OVER (ORDER BY {trgm_sql} DESC)), 0.01)
+            COALESCE({vector_expr}, 0.0) * 0.7
             +
-            COALESCE(1.0 / (60 + RANK() OVER (ORDER BY {vector_sql} DESC)), 0.01)
+            COALESCE({trgm_expr}, 0.0) * 0.3
         ) DESC
         LIMIT :top_k
         """
@@ -196,7 +203,8 @@ class VectorStore:
             "top_k": top_k,
         }
         if query_embedding is not None:
-            params["embedding"] = query_embedding
+            # 将 list[float] 转为 pgvector 字符串格式 "[x1,x2,...]"
+            params["embedding"] = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
         result = await self._session.execute(text(sql_text), params)
         rows = result.all()
@@ -205,7 +213,7 @@ class VectorStore:
         for row in rows:
             vec_score = float(row.vector_score) if row.vector_score is not None else 0.0
             trg_score = float(row.trgm_score) if row.trgm_score is not None else 0.0
-            # RRF 融合分数归一化到 [0,1]
+            # ???? 融合分数归一化到 [0,1]
             combined = 0.7 * vec_score + 0.3 * trg_score
 
             search_results.append(SearchResult(
@@ -219,8 +227,7 @@ class VectorStore:
                 score=round(combined, 4),
             ))
 
-        # 按 RRF 分数排序并过滤阈值
-        search_results.sort(key=lambda r: r.score, reverse=True)
+        # 按 ???? 分数排序并过滤阈值
         search_results = [r for r in search_results if r.score >= similarity_threshold]
         return search_results[:top_k]
     async def fuzzy_search(

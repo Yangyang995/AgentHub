@@ -75,11 +75,13 @@ async def test_streams_deepseek_compatible_deltas_and_sends_history() -> None:
     assert deltas == ["你好", "，世界"]
     assert statuses == ["running", "succeeded"]
     assert captured["authorization"] == "Bearer test-secret"
-    assert captured["payload"] == {
-        "model": "deepseek-chat",
-        "messages": history,
-        "stream": True,
-    }
+    assert captured["payload"]["model"] == "deepseek-chat"
+    assert captured["payload"]["stream"] is True
+    # RAG 上下文注入后 messages 包含额外 system 消息，历史消息应在末尾
+    msgs = captured["payload"]["messages"]
+    assert len(msgs) >= len(history)
+    # 验证历史消息完整保留（在末尾）
+    assert msgs[-len(history):] == history
 
 
 @pytest.mark.asyncio

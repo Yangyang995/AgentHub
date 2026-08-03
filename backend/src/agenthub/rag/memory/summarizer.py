@@ -1,4 +1,4 @@
-﻿"""第二层：摘要记忆——递增摘要 + 每10轮全量合并校准。
+"""第二层：摘要记忆——递增摘要 + 每10轮全量合并校准。
 
 核心策略：
 - 每轮新消息产生后递增更新摘要（合并到上一轮摘要）
@@ -60,8 +60,9 @@ _SUMMARIZE_FULL_PROMPT = """你是一个会话摘要助手。请将以下完整�
 class SummaryService:
     """会话摘要服务——递增 + 全量合并。"""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, embedder: object | None = None) -> None:
         self._session = session
+        self._embedder = embedder
 
     async def summarize_round(
         self,

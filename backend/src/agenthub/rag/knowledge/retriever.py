@@ -1,4 +1,4 @@
-﻿"""检索流水线——Query 扩写 + 多路混合检索 + RRF 融合 + LLM 重排序。
+"""检索流水线——Query 扩写 + 多路混合检索 + RRF 融合 + LLM 重排序。
 
 针对用户简短/模糊提问自动扩写为多个检索变体，
 多路并行检索后 RRF 融合去重，最后 LLM 精排 Top-N。
@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 import uuid
@@ -78,12 +77,13 @@ class KnowledgeRetriever:
             except Exception:
                 query_embedding = None
 
-        # 并行检索所有 query 变体
-        tasks = [
-            self._store.hybrid_search(project_id, query_embedding, q, top_k=60)
-            for q in queries
-        ]
-        all_results_list = await asyncio.gather(*tasks)
+        # 顺序检索所有 query 变体（同一 session 不支持并发）
+        all_results_list: list[list[SearchResult]] = []
+        for q in queries:
+            results = await self._store.hybrid_search(
+                project_id, query_embedding, q, top_k=60
+            )
+            all_results_list.append(results)
 
         # RRF 融合去重
         fused = self._rrf_fuse(all_results_list)

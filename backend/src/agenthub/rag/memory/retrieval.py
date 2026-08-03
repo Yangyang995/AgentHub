@@ -56,7 +56,7 @@ class MemoryRetriever:
     ) -> None:
         self._session = session
         self._embedder = embedder
-        self._summary_service = SummaryService(session)
+        self._summary_service = SummaryService(session, embedder)
         self._long_term = LongTermMemory(session)
 
     async def retrieve(

@@ -35,6 +35,44 @@ from agenthub.services.prompt_loader import load_system_prompt
 from agenthub.services.realtime import ConversationEventBroker
 
 
+async def _run_forgetting_periodic(application) -> None:
+    """遗忘策略后台任务——每 24 小时扫描并归档过期偏好。
+    
+    首次启动 5 分钟后执行，之后每 24 小时一次。
+    失败不传播异常，仅记录日志。
+    """
+    import logging
+    from agenthub.rag.memory.forgetting import ForgettingManager
+    from agenthub.models.orm import Project
+    from sqlalchemy import select
+
+    logger = logging.getLogger(__name__)
+    await asyncio.sleep(300)
+
+    while True:
+        try:
+            settings = application.state.settings
+            engine: AsyncEngine = create_async_engine(
+                settings.database_url, echo=False
+            )
+            async_session = async_sessionmaker(engine, expire_on_commit=False)
+            async with async_session() as session:
+                result = await session.execute(select(Project))
+                projects = result.scalars().all()
+                total = 0
+                for project in projects:
+                    mgr = ForgettingManager(session)
+                    count = await mgr.archive_stale(project.id)
+                    total += count
+                if total > 0:
+                    logger.info("遗忘策略归档完成，共归档 %d 条过期偏好", total)
+            await engine.dispose()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("遗忘策略执行失败")
+        await asyncio.sleep(86400)
+
 def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdapter]:
     """按 Agent 类型装配 Adapter，并根据 Agent 能力注入对应的 System Prompt。
 
@@ -44,8 +82,8 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
 
     def resolve(agent: Agent) -> AgentAdapter:
         if agent.agent_type == AgentType.MOCK:
-            # ??????? Mock Agent ????????????????????
-            # ??????????????????????????????
+            # 应用默认注册的 Mock Agent 必须产生可见内容，便于验证完整聊天链路；
+            # 固定回复不回显用户输入，也不会让用户误以为它是真实模型输出。
             return MockAdapter(
                 MockAdapterScript(
                     adapter_name=agent.name,
@@ -53,7 +91,7 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
                         MockScriptStep(
                             action="delta",
                             content=(
-                                "????? Mock Agent ??????? AgentHub ?????????"
+                                "这是确定性 Mock Agent 回复，用于验证 AgentHub 的对话与并发链路。"
                             ),
                             content_type="markdown",
                         )
@@ -62,31 +100,16 @@ def _default_adapter_resolver(settings: Settings) -> Callable[[Agent], AgentAdap
             )
         if agent.agent_type == AgentType.OPENAI_COMPATIBLE:
             dependencies = settings.runtime_dependencies()
-            # ?? Agent ????????? System Prompt
+            # 根据 Agent 的能力配置加载对应 System Prompt
             system_prompt: str | None = None
             if agent.adapter_config_ref is not None:
                 system_prompt = load_system_prompt(agent.adapter_config_ref)
-            elif agent.name == "DeepSeek":
-                # ?? DeepSeek ????????????????? System Prompt
-                system_prompt = load_system_prompt("deepseek")
-            # Adapter ????Runner ??????? Adapter ??
-            def _adapter_factory(sp: str | None = None) -> AgentAdapter:
-                return OpenAICompatibleAdapter(
-                    base_url=dependencies.llm_base_url,
-                    api_key=dependencies.llm_api_key,
-                    model=dependencies.llm_model,
-                    system_prompt=sp if sp is not None else system_prompt,
-                )
-            # ?????????? Agent??Runner?DeepSeek ????????? Adapter??
-            # ??DeepSeek ??Agent???????? think-act ??
-            is_provider = agent.name == "DeepSeek"
-            if agent.capabilities and agent.capabilities[0] and not is_provider:
-                from agenthub.agents import get_runner  # noqa: PLC0415
-                runner_cls = get_runner(agent.capabilities[0])
-                if runner_cls is not None:
-                    return runner_cls(_adapter_factory, system_prompt)
-            # Fallback: ? Runner ?????????? Adapter
-            return _adapter_factory()
+            return OpenAICompatibleAdapter(
+                base_url=dependencies.llm_base_url,
+                api_key=dependencies.llm_api_key,
+                model=dependencies.llm_model,
+                system_prompt=system_prompt,
+            )
         raise RuntimeError("Adapter is not configured")
 
     return resolve
@@ -105,11 +128,17 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):  # type: ignore[no-untyped-def]
-        """关闭时取消并等待本进程启动的执行，避免遗留后台协程。"""
-        yield
-        tasks: set[asyncio.Task[None]] = application.state.execution_tasks
-        for task in tasks:
-            task.cancel()
+        """??????????????????????????"""
+        # ????????????? 24 ??????????
+        forgetting_task = asyncio.create_task(_run_forgetting_periodic(application))
+        application.state.execution_tasks.add(forgetting_task)
+        try:
+            yield
+        finally:
+            forgetting_task.cancel()
+            tasks: set[asyncio.Task[None]] = application.state.execution_tasks
+            for task in tasks:
+                task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         if owned_engine is not None:

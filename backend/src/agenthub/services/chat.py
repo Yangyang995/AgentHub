@@ -55,6 +55,11 @@ from agenthub.schemas.domain import (
 )
 from agenthub.services.diff_tools import compute_unified_diff, extract_code_blocks
 from agenthub.services.realtime import ConversationEventBroker
+from agenthub.rag.knowledge.embedder import EmbeddingClient
+from agenthub.rag.memory.retrieval import MemoryRetriever
+from agenthub.rag.memory.summarizer import SummaryService
+from agenthub.rag.knowledge.retriever import KnowledgeRetriever
+from agenthub.rag.knowledge.vector_store import VectorStore
 
 
 class ChatNotFoundError(LookupError):
@@ -618,6 +623,70 @@ class ChatService:
             for execution_id in execution_ids:
                 group.create_task(self.run_execution(execution_id))
 
+
+    async def _summarize_after_execution(
+        self, project_id, conversation_id, user_msg, agent_reply
+    ):
+        """Agent 执行成功后更新会话摘要（失败不阻塞主流程）。"""
+        try:
+            round_text = "[用户]: " + user_msg[:1000] + "\n[Agent]: " + agent_reply[:1000]
+            async with self._sessions() as session:
+                svc = SummaryService(session)
+                summaries = await svc.get_summaries(conversation_id)
+                round_num = len(summaries)
+                await svc.summarize_round(
+                    project_id, conversation_id, round_text, round_num
+                )
+        except Exception:
+            pass
+
+    async def _inject_rag_memory_context(
+        self, project_id, conversation_id, query_text
+    ):
+        """消息执行前拉取记忆/知识库上下文，注入 AgentTask.context。"""
+        import logging as _logging
+        _log = _logging.getLogger("agenthub.rag.inject")
+        try:
+            _log.info("RAG inject start: project=%s conv=%s query=%s", project_id, conversation_id, query_text[:80])
+            from agenthub.core.config import get_settings
+            settings = get_settings()
+            embedder = EmbeddingClient(settings.embedding_dependencies())
+            _log.info("Embedding available: %s", embedder.is_available)
+            async with self._sessions() as session:
+                # 会话摘要 + 跨会话长期偏好
+                mem_retriever = MemoryRetriever(session, embedder)
+                _log.info("Fetching memory context...")
+                mem_ctx = await mem_retriever.retrieve(
+                    project_id, conversation_id, query_text
+                )
+                _log.info("Memory done: summary=%s prefs=%d", bool(mem_ctx.summary_context), len(mem_ctx.preferences))
+                # 知识库检索：向量 + 关键词混合检索
+                store = VectorStore(session)
+                kb_retriever = KnowledgeRetriever(store, embedder)
+                _log.info("Fetching knowledge context...")
+                kb_result = await kb_retriever.retrieve(
+                    project_id, query_text, top_k=5
+                )
+            result = {}
+            _log.info("Knowledge done: %d results", len(kb_result.results))
+            if mem_ctx.summary_context:
+                result["summary_context"] = mem_ctx.summary_context
+            if mem_ctx.preferences:
+                result["preference_context"] = mem_ctx.to_context_dict().get(
+                    "preference_context", []
+                )
+            if kb_result.results:
+                result["knowledge_context"] = [
+                    {"file": r.file_name, "content": r.content[:800], "score": r.score}
+                    for r in kb_result.results
+                ]
+            _log.info("RAG inject done: keys=%s kb_count=%s", list(result.keys()), len(result.get("knowledge_context", [])))
+            return result
+        except Exception:
+            import traceback
+            _log.exception("RAG inject FAILED")
+            return {}
+
     async def run_execution(self, execution_id: uuid.UUID) -> None:
         """异步消费 Adapter；每个事件提交成功后才允许进入实时队列。"""
         async with self._sessions() as session:
@@ -657,6 +726,13 @@ class ChatService:
                     }
                     for item in message_rows
                 ]
+            # 注入 RAG 记忆上下文
+            rag_ctx = await self._inject_rag_memory_context(
+                execution.project_id, execution.conversation_id, message.content
+            )
+            task_context = {"messages": history}
+            if rag_ctx:
+                task_context.update(rag_ctx)
             task = AgentTask(
                 execution_id=execution.id,
                 project_id=execution.project_id,
@@ -664,7 +740,7 @@ class ChatService:
                 conversation_id=execution.conversation_id,
                 message_content=message.content,
                 working_dir=Path(project.root_path),
-                context={"messages": history},
+                context=task_context,
             )
             content: list[str] = []
             execution_succeeded = False
@@ -682,6 +758,12 @@ class ChatService:
                     content.append(event.delta)
                 # 所有事件（含状态变更）都推送到 WebSocket，前端据此更新取消按钮等 UI
                 await self._broker.publish(persisted)
+            # 执行成功后更新会话摘要
+            if execution_succeeded and content:
+                await self._summarize_after_execution(
+                    execution.project_id, execution.conversation_id,
+                    message.content, "".join(content)
+                )
             # Phase 7: 群聊模式下检测代码块，落盘并广播 code.summary 事件
             if execution_succeeded and content:
                 try:
@@ -927,6 +1009,13 @@ class ChatService:
                 ]
             # ???????????Agent??????
             context_messages = list(history) + list(extra_context)
+            # 注入 RAG 记忆上下文
+            rag_ctx = await self._inject_rag_memory_context(
+                execution.project_id, execution.conversation_id, message.content
+            )
+            task_context = {"messages": context_messages}
+            if rag_ctx:
+                task_context.update(rag_ctx)
             task = AgentTask(
                 execution_id=execution.id,
                 project_id=execution.project_id,
@@ -934,7 +1023,7 @@ class ChatService:
                 conversation_id=execution.conversation_id,
                 message_content=message.content,
                 working_dir=Path(project.root_path),
-                context={"messages": context_messages},
+                context=task_context,
             )
             content: list[str] = []
             execution_succeeded = False
@@ -955,6 +1044,11 @@ class ChatService:
             if not execution_succeeded:
                 raise RuntimeError(f"Agent execution failed: {execution_id}")
             full = "".join(content)
+            # 执行成功后更新会话摘要
+            await self._summarize_after_execution(
+                execution.project_id, execution.conversation_id,
+                message.content, full
+            )
             logger.info("Pipeline step DONE: execution=%s, output_len=%d", execution_id, len(full))
             return full
         finally:

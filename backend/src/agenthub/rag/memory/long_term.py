@@ -1,4 +1,4 @@
-﻿"""第三层：长期偏好记忆——跨会话用户偏好、五步检索、三因子排序。
+"""第三层：长期偏好记忆——跨会话用户偏好、五步检索、三因子排序。
 
 五步检索流水线：
 1. Query 重写（LLM 提取意图 + 2-3 变体）
@@ -78,11 +78,12 @@ class LongTermMemory:
         queries = await self._rewrite_query(query)
 
         # 2. 并行混合检索
-        tasks = [
-            self._hybrid_search(project_id, q, query_embedding, category_filter)
-            for q in queries
-        ]
-        results_lists = await asyncio.gather(*tasks)
+        results_lists: list[list[UserPreference]] = []
+        for q in queries:
+            results = await self._hybrid_search(
+                project_id, q, query_embedding, category_filter
+            )
+            results_lists.append(results)
 
         # 3. RRF 融合
         fused = await self._rrf_fuse(results_lists)
@@ -230,7 +231,6 @@ class LongTermMemory:
         category_filter: str | None,
     ) -> list[UserPreference]:
         """混合检索——相似度 + 关键词，限定 project_id。"""
-        # SQL 动态构建
         conditions = "up.project_id = :project_id AND up.is_active = true"
         params: dict[str, Any] = {"project_id": project_id, "query_text": query}
 
@@ -238,16 +238,8 @@ class LongTermMemory:
             conditions += " AND up.category = :category"
             params["category"] = category_filter
 
-        if query_embedding is not None:
-            params["embedding"] = query_embedding
-            order_clause = (
-                "ORDER BY ("
-                "  0.7 * (1.0 - (up.embedding <=> :embedding::vector))"
-                "  + 0.3 * COALESCE(similarity(up.value, :query_text), 0.0)"
-                ") DESC"
-            )
-        else:
-            order_clause = "ORDER BY COALESCE(similarity(up.value, :query_text), 0.0) DESC"
+        # 仅使用关键词检索（trigram），向量比较在 Python 层完成
+        order_clause = "ORDER BY COALESCE(similarity(up.value, :query_text), 0.0) DESC"
 
         sql_text = f"""
         SELECT up.* FROM user_preferences up
@@ -256,7 +248,21 @@ class LongTermMemory:
         LIMIT 30
         """
         result = await self._session.execute(text(sql_text), params)
-        return list(result.scalars().all())
+        prefs = list(result.scalars().all())
+
+        # 如果有查询向量，在 Python 层计算向量相似度并重新排序
+        if query_embedding is not None and prefs:
+            scored = []
+            for pref in prefs:
+                sim = 0.0
+                if pref.embedding is not None:
+                    sim = 1.0 - self._cosine_distance(query_embedding, pref.embedding)
+                # 保持 trigram 分数（如果可用的话简单处理为 0.5 基准）
+                combined = 0.7 * sim + 0.3 * 0.5
+                scored.append((combined, pref))
+            scored.sort(key=lambda x: x[0], reverse=True)
+            return [p for _, p in scored]
+        return prefs
 
     async def _rrf_fuse(
         self, result_lists: list[list[UserPreference]]
@@ -285,8 +291,8 @@ class LongTermMemory:
         for pref in candidates:
             # 相似度因子（无向量时默认 0.5）
             sim = 0.5
-            if query_embedding is not None:
-                sim = 1.0 - self._cosine_distance(query_embedding, [0.0] * 1024)
+            if query_embedding is not None and pref.embedding is not None:
+                sim = 1.0 - self._cosine_distance(query_embedding, pref.embedding)
             # 重要性因子
             imp = pref.importance
             # 时间衰减因子

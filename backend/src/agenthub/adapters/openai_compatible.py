@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -188,6 +191,26 @@ class OpenAICompatibleAdapter:
             error_message=error_message,
         )
 
+    def _build_rag_context_msg(self, context: dict) -> str | None:
+        parts = []
+        summary = context.get("summary_context")
+        if summary:
+            parts.append("[会话摘要]\n" + summary)
+        prefs = context.get("preference_context")
+        if prefs and isinstance(prefs, list):
+            pref_lines = ["[用户偏好]"]
+            for p in prefs:
+                pref_lines.append("- {}: {}".format(p.get('key', ''), p.get('value', '')))
+            parts.append("\n".join(pref_lines))
+        kb = context.get("knowledge_context")
+        if kb and isinstance(kb, list):
+            parts.append("[知识库检索] 已从项目知识库检索到{}条相关资料（附加在用户消息中）".format(len(kb)))
+        if not parts:
+            return None
+        result = "\n\n".join(parts)
+        logger.info("[RAG-ADAPTER] context built: %d chars, keys=%s", len(result), list(context.keys()))
+        return result
+
     def _messages(self, task: AgentTask) -> list[dict[str, str]]:
         """组装发送给 LLM 的消息列表。
 
@@ -201,6 +224,11 @@ class OpenAICompatibleAdapter:
         # 注入 System Prompt（若已配置）
         if self._system_prompt is not None:
             base.append({"role": "system", "content": self._system_prompt})
+        # 注入 RAG 上下文（会话摘要 + 用户偏好 + 知识库提示）
+        logger.info("[RAG-ADAPTER] _messages: context keys=%s", list(task.context.keys()))
+        rag_msg = self._build_rag_context_msg(task.context)
+        if rag_msg:
+            base.append({"role": "system", "content": rag_msg})
         history = task.context.get("messages")
         if isinstance(history, list) and all(
             isinstance(item, dict)
@@ -208,9 +236,32 @@ class OpenAICompatibleAdapter:
             and isinstance(item.get("content"), str)
             for item in history
         ):
-            return base + [
+            msgs = base + [
                 {"role": str(item["role"]), "content": str(item["content"])} for item in history
             ]
+            # 将知识库内容注入到最后一条用户消息中
+            kb_context = task.context.get("knowledge_context")
+            if kb_context and isinstance(kb_context, list) and msgs:
+                kb_text = "\n\n[参考知识库内容]\n"
+                for kb_item in kb_context:
+                    kb_text += "--- {} ---\n{}\n".format(kb_item.get('file', ''), kb_item.get('content', ''))
+                kb_text += "\n请基于以上知识库内容回答用户问题。如果知识库中没有相关信息，可以基于你自己的知识回答。"
+                for i in range(len(msgs) - 1, -1, -1):
+                    if msgs[i]["role"] == "user":
+                        msgs[i]["content"] = kb_text + "\n\n[用户问题]\n" + msgs[i]["content"]
+                        logger.info("[RAG-ADAPTER] Injected KB into history user message at index %d (%d chars)", i, len(kb_text))
+                        break
+            return msgs
+        # 无历史消息时，将知识库内容注入用户消息
+        kb_context = task.context.get("knowledge_context")
+        if kb_context and isinstance(kb_context, list):
+            kb_text = "\n\n[参考知识库内容]\n"
+            for kb_item in kb_context:
+                kb_text += "--- {} ---\n{}\n".format(kb_item.get('file', ''), kb_item.get('content', ''))
+            kb_text += "\n请基于以上知识库内容回答用户问题。如果知识库中没有相关信息，可以基于你自己的知识回答。"
+            user_content = kb_text + "\n\n[用户问题]\n" + task.message_content
+            logger.info("[RAG-ADAPTER] Injected KB into user message (%d chars)", len(kb_text))
+            return [*base, {"role": "user", "content": user_content}]
         return [*base, {"role": "user", "content": task.message_content}]
 
     def _parse_sse_delta(self, line: str) -> str | None:

@@ -373,6 +373,12 @@ export function WorkbenchPage() {
       // 错误由 resume API 自身处理
     } finally {
       setApprovalSubmitting(false)
+      // 拒绝后清理 pipeline 状态和审批面板，移除取消按钮
+      if (action === "reject") {
+        setPipelineActive(false)
+        setApprovalState(null)
+        setApprovalFeedback("")
+      }
     }
   }
 
@@ -385,9 +391,10 @@ export function WorkbenchPage() {
 
   const visibleStreams = Object.values(streams).filter((stream) => {
     if (stream.conversationId !== selectedConversationId) return false
-    // 已完成的 Agent 输出转为普通消息展示，不再保留流式面板
-    // 但架构审批等待中的流式面板需要保留，用于展示审批按钮
+    // 架构审批等待中的流式面板需要保留，用于展示审批按钮
     if (approvalState && approvalState.executionId === stream.executionId) return true
+    // 已完成的流：消息列表刷新期间保持可见，避免答案闪烁消失
+    if (stream.status === 'succeeded' && messages.isFetching) return true
     return stream.status !== 'succeeded'
   })
   const cancellableExecution = (() => {
@@ -550,14 +557,18 @@ export function WorkbenchPage() {
           <section className="conversation-panel" aria-label="当前会话">
             {connection !== 'connected' ? <div className="connection-notice" role="status"><ConnectionStatus state={connection} /><span>消息仍可查看，恢复后会自动补发遗漏事件。</span></div> : null}
             <div ref={messageListRef} className="message-list" aria-live="polite" aria-busy={messages.isPending} onScroll={updateScrollToBottomVisibility}>
-              {messages.isPending ? <div className="center-state" role="status">正在加载消息…</div> : null}
+              {messages.isPending && !messages.data ? <div className="center-state" role="status">正在加载消息…</div> : null}
               {messages.isError ? <div className="center-state" role="alert"><span>消息加载失败</span><button className="secondary-button" type="button" onClick={() => void messages.refetch()}><RefreshCw aria-hidden="true" size={15} />重试</button></div> : null}
               {messages.data?.length === 0 && visibleStreams.length === 0 ? <div className="center-state"><MessageSquare aria-hidden="true" size={22} /><span>发送第一条消息开始协作</span></div> : null}
               {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} />)}
               {visibleStreams.map((stream) => (
                 <article key={`execution-${stream.executionId}`} className="message-row message-row--agent message-row--streaming" data-status={stream.status}>
                   <header><Bot aria-hidden={true} size={15} /><strong>{stream.agentName}</strong>{approvalState && approvalState.executionId === stream.executionId ? null : <span>{statusLabel(stream.status)}</span>}</header>
-                  {stream.content ? <MarkdownContent content={stream.content} truncateAtCodeBlock={activeConversation && isGroupConversation(activeConversation)} /> : (approvalState && approvalState.executionId === stream.executionId ? null : <p className="stream-placeholder">等待内容…</p>)}
+                  {approvalState && approvalState.executionId === stream.executionId
+                    ? null  /* 审批中：内容已由上方消息展示，此处仅显示审批按钮 */
+                    : stream.content
+                      ? <MarkdownContent content={stream.content} truncateAtCodeBlock={activeConversation && isGroupConversation(activeConversation)} />
+                      : <p className="stream-placeholder">等待内容…</p>}
                   {stream.error ? <p className="inline-error" role="alert">{stream.error}</p> : null}
                   {approvalState && approvalState.executionId === stream.executionId ? (
                     <div className="approval-bar">
