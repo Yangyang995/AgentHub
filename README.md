@@ -1,34 +1,40 @@
 ﻿# AgentHub
 
-AgentHub 是**以群聊写代码为核心的**多 Agent 软件交付工作台。开发者可以在群聊中 `@子Agent` 分派开发任务，也可以直接发送需求，由 Orchestrator 自动拆解并调度子 Agent（需求分析、架构设计、代码生成、代码审查、测试、技术报告撰写）各司其职，完成从需求到部署的全流程。
+AgentHub 是**以群聊写代码为核心的**多 Agent 软件交付工作台。开发者可以在群聊中 `@子Agent` 分派开发任务，也可以直接发送需求，由 Orchestrator 自动拆解并调度子 Agent（架构设计、代码生成、代码审查、测试）各司其职，完成从需求到部署的全流程。
 
 单聊模式仅支持 DeepSeek（OpenAI 兼容接口），提供轻量高效的对话式编程体验。
 
 ## 当前状态
 
-项目目前完成到 Phase 4（REST API、WebSocket、Mock Adapter），Phase 5-11 的详细计划见 `DEVELOPMENT_PLAN.md`。
+全部 11 个 Phase 已完成，首版核心闭环验收通过。各阶段详情见 `DEVELOPMENT_PLAN.md`。
 
-已完成：
+已完成功能：
 - FastAPI 应用工厂、类型化配置、敏感信息保护
-- PostgreSQL 业务模型、Alembic 迁移、pgvector 扩展基础
+- PostgreSQL 业务模型、Alembic 迁移、pgvector + pg_trgm 扩展
 - Pydantic v2 Schema、仓储层、聊天消息核心服务
 - REST API（`/api/v1`）、WebSocket 实时推送
-- Mock Adapter 和确定性测试
+- Mock Adapter 和 DeepSeek OpenAI 兼容 Adapter
+- 群聊显式 @Agent 并行分发与隐式 Orchestrator Pipeline 编排
+- 4 Agent 串行 Pipeline（架构设计 → 代码生成 → 代码审查 → 测试）+ 架构审批 HITL
+- RAG 知识库：代码/文档分块、pgvector 向量化、混合检索（关键词 + 语义）
+- 会话记忆：渐进摘要、全量合并、向量检索、遗忘策略
+- Code Diff 提取与审批、本地 HTML/CSS/JS 预览
+- Vercel 部署（含轮询状态追踪）
+- 安全基础设施：速率限制、请求追踪、Prometheus 指标、结构日志、路径穿越/XSS/CSRF 防御
+- Docker Compose 全栈编排（PostgreSQL + 后端 + 前端 Nginx）
 
 ## 预置子 Agent
 
-群聊模式下预置 6 个垂直代码子 Agent：
+群聊模式下预置 4 个垂直代码子 Agent：
 
 | Agent | 能力 | 职责 |
 |---|---|---|
-| 需求分析专家 | requirement_analysis | 模糊需求 → 结构化需求规格 |
-| 架构设计专家 | architecture_design | 需求规格 → 架构设计文档 |
+| 架构设计专家 | architecture_design | 需求 → 架构设计文档 |
 | 代码生成专家 | code_generation | 设计文档 → 高质量代码 |
 | 代码审查专家 | code_review | 代码质量、安全性和最佳实践审查 |
 | 测试专家 | testing | 验收标准 → 测试用例与代码 |
-| 技术报告撰写专家 | documentation | 分析结果 → 结构化技术报告 |
 
-群聊中使用 `@Agent名` 直接路由到指定 Agent，无 @ 时由 Orchestrator 自动拆解调度。
+群聊中使用 `@Agent名` 直接路由到指定 Agent，无 @ 时由 Orchestrator Pipeline 按架构→代码→审查→测试顺序自动串行调度。
 
 ## 技术栈
 
@@ -59,7 +65,7 @@ AGENTHUB_LLM_MODEL=deepseek-chat
 # PostgreSQL
 AGENTHUB_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agenthub
 
-# Embedding（RAG 知识库，Phase 8）
+# Embedding（RAG 知识库）
 AGENTHUB_EMBEDDING_BASE_URL=https://api.deepseek.com/v1
 AGENTHUB_EMBEDDING_API_KEY=YOUR_API_KEY_HERE
 AGENTHUB_EMBEDDING_MODEL=text-embedding-3-small
@@ -123,7 +129,7 @@ npm.cmd run e2e
 
 ## 基础设施
 
-Compose 提供 PostgreSQL + pgvector 开发服务。检查解析后的 Compose 配置：
+Compose 提供 PostgreSQL + pgvector + 后端 + 前端 Nginx 全栈服务。检查解析后的 Compose 配置：
 
 ```powershell
 cd D:\codexWorkPlace\AgentHub
@@ -136,7 +142,7 @@ docker compose --env-file .env.example -f infra\compose.yaml config --quiet
 backend/   FastAPI 应用、配置与后端测试
 frontend/  React 工作台、前端测试与 E2E 配置
 infra/     本地开发基础设施配置
-docs/      架构、API 与验收记录
+docs/      验收报告
 ```
 
 阶段范围、公共契约和后续顺序以 `AGENTS.md` 和 `DEVELOPMENT_PLAN.md` 为准。

@@ -1,5 +1,16 @@
 ﻿# AgentHub 开发计划
 
+## 项目状态
+
+全部 11 个 Phase 已完成验收（2026-08-04）。实际实现与初始计划的主要差异：
+
+- 预置子 Agent 从 6 个精简为 4 个（移除需求分析专家和技术报告撰写专家）
+- Orchestrator Pipeline 采用 4 Agent 串行架构（架构设计 → 代码生成 → 代码审查 → 测试）+ 架构审批 HITL
+- prompts/adapters/ 目录未独立创建，Prompt 统一由 prompt_loader 加载
+- 前端 eatures/ 和 schemas/ 目录未独立拆分，功能集中在 components/ 和 pi/ 中
+
+---
+
 本文档将 AgentHub 首版拆分为 11 个可独立执行、验证和验收的阶段。每个阶段均包含目标、前置条件、交付物、可直接交给开发者的完整提示词、验收标准和注意事项。
 
 阶段开发必须遵守根目录 `AGENTS.md`。当前阶段未通过验收时，不得开始依赖它的后续阶段。
@@ -14,7 +25,7 @@ AgentHub 是**以群聊写代码为核心的**多 Agent 软件交付工作台。
 
 - 本地单用户，不实现账号、组织、多租户和计费。
 - 单聊仅保留 **DeepSeek**（通过 OpenAI 兼容接口），移除 Claude Code 和 Codex CLI。
-- 群聊围绕代码生成场景，预置多个垂直子 Agent（需求分析、架构设计、代码生成、代码审查、测试、技术报告撰写）。
+- 群聊围绕代码生成场景，预置 4 个垂直子 Agent（架构设计、代码生成、代码审查、测试）。
 - Agent 接入包括确定性 Mock Adapter 和真实 DeepSeek Adapter。
 - Orchestrator 通过 LangGraph + OpenAI 兼容接口完成结构化计划生成、子 Agent 调度和结果汇总。
 - PostgreSQL + pgvector：业务数据 + 向量存储，支撑 RAG 知识库和会话记忆。
@@ -384,7 +395,7 @@ WebSocket 事件信封：
 
 ---
 
-## Phase 8：RAG 知识库与会话记忆
+## Phase 8：RAG 知识库与会话记忆 ✅ 已完成
 
 ### 目标
 
@@ -449,7 +460,7 @@ WebSocket 事件信封：
 
 ---
 
-## Phase 9：Orchestrator 与 LangGraph
+## Phase 9：Orchestrator 与 LangGraph ✅ 已完成
 
 ### 目标
 
@@ -459,7 +470,7 @@ WebSocket 事件信封：
 
 - Phase 8 RAG 知识库和会话记忆通过验收。
 - OpenAI 兼容接口配置、Prompt 加载机制明确。
-- 6 个预置子 Agent 可独立工作。
+- 4 个预置子 Agent 可独立工作。
 
 ### 交付物
 
@@ -491,11 +502,11 @@ WebSocket 事件信封：
 
 - LLM 输出不可信，必须经过 Pydantic 校验。
 - 不重写已有 Message Pipeline、Adapter 和 Approval 契约。
-- 首次实现可先覆盖典型场景（架构 → 代码 → 审查 → 测试）。
+- 实际实现为 4 Agent 串行 Pipeline + 架构审批 HITL（架构设计 → 代码生成 → 代码审查 → 测试），使用 langgraph interrupt() 实现人工审批暂停。
 
 ---
 
-## Phase 10：本地预览与 Vercel 部署
+## Phase 10：本地预览与 Vercel 部署 ✅ 已完成
 
 ### 目标
 
@@ -522,7 +533,7 @@ WebSocket 事件信封：
 
 ---
 
-## Phase 11：安全、可观测性、容器化与发布验收
+## Phase 11：安全、可观测性、容器化与发布验收 ✅ 已完成
 
 ### 目标
 

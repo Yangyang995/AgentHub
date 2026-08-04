@@ -39,9 +39,6 @@ class AgentCapability(enum.StrEnum):
     TESTING = "testing"
     # 已废弃——技术报告撰写专家已移除，保留以兼容已有数据库记录
     DOCUMENTATION = "documentation"  # deprecated
-    # 以下为历史兼容，仍可用但不作为预置 Agent 的主能力
-    FILE_OPERATION = "file_operation"
-    DEPLOYMENT = "deployment"
 
 
 class AgentStatus(enum.StrEnum):

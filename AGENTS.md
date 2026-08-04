@@ -14,7 +14,7 @@ AgentHub 是以群聊写代码为核心的多 Agent 软件交付工作台。首�
 
 - 面向本地单用户，不实现账号体系、组织、多租户和计费。
 - 单聊仅保留 DeepSeek（通过 OpenAI 兼容接口）。移除 Claude Code 和 Codex CLI Adapter 作为可选提供方。
-- 群聊预置 6 个代码垂直子 Agent：需求分析专家、架构设计专家、代码生成专家、代码审查专家、测试专家、技术报告撰写专家。
+- 群聊预置 4 个代码垂直子 Agent：架构设计专家、代码生成专家、代码审查专家、测试专家（需求分析和技术报告撰写已从首版移除）。
 - Agent 接入实现确定性的 Mock Adapter 和真实 DeepSeek Adapter。
 - Orchestrator 通过 LangGraph + OpenAI 兼容接口实现群聊隐式消息的任务拆解、子 Agent 调度和结果汇总。
 - PostgreSQL + pgvector 同时保存业务数据和向量嵌入，支撑 RAG 知识库和会话记忆。
@@ -103,7 +103,7 @@ AgentHub/
 ## 5. 核心业务对象
 
 - `Project`：已注册本地项目及其受信任根目录，是工作区和安全隔离边界。
-- `Agent`：Agent 注册信息、平台类型、能力、启停状态和适配器配置引用。预置 6 个代码子 Agent（需求分析、架构设计、代码生成、代码审查、测试、技术报告撰写）。
+- `Agent`：Agent 注册信息、平台类型、能力、启停状态和适配器配置引用。预置 4 个代码子 Agent（架构设计、代码生成、代码审查、测试）。
 - `Conversation`：项目内单聊或群聊会话。
 - `Message`：用户、Agent 或系统消息，保存稳定顺序和内容类型。
 - `AgentExecution`：一次 Adapter 执行，记录状态、序号、取消信息和错误。
@@ -345,7 +345,7 @@ npm.cmd run e2e
 
 ## 12. 当前开发环境事实
 
-截至 2026-07-30 已核对：
+截至 2026-08-04 已核对（全部 11 个 Phase 已完成验收）：
 
 - Python 3.13.7 可用。
 - uv 0.11.8 可用。
@@ -355,7 +355,7 @@ npm.cmd run e2e
 - psql 当前不在 PATH，数据库命令行集成尚未验证。
 - DeepSeek API 通过 OpenAI 兼容接口调用，是唯一的生产 Agent 提供方。
 - Claude Code CLI 和 Codex CLI Adapter 已移除作为可选提供方，相关代码保留在仓库中但不再向前端暴露。
-- pgvector 扩展已在 Compose 配置中启用，用于 RAG 知识库和会话记忆（Phase 8）。
+- pgvector 扩展已在 Compose 配置中启用，用于 RAG 知识库和会话记忆（Phase 8）。`r`n- Orchestrator Pipeline（Phase 9）已实现 4 Agent 串行编排 + 架构审批 HITL。`r`n- 本地预览与 Vercel 部署（Phase 10）已通过验收。`r`n- 安全、可观测性与容器化（Phase 11）已通过验收。
 
 这些事实可能随环境变化。每个阶段开始时重新探测其依赖，并记录本次实际结果。
 

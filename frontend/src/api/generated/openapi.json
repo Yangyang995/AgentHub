@@ -49,6 +49,26 @@
         }
       }
     },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "observability"
+        ],
+        "summary": "Metrics",
+        "description": "返回 Prometheus 格式的指标数据。\n\n在生产环境中，此端点应在反向代理层面限制访问。",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "tags": [
@@ -2318,9 +2338,7 @@
           "code_generation",
           "code_review",
           "testing",
-          "documentation",
-          "file_operation",
-          "deployment"
+          "documentation"
         ],
         "title": "AgentCapability",
         "description": "Agent 能力声明，用于 Orchestrator 能力匹配。\n\n与 4 个预置子 Agent 一一对应：\n- architecture_design：架构设计专家\n- code_generation：代码生成专家\n- code_review：代码审查专家\n- testing：测试专家"

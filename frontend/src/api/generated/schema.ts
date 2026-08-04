@@ -46,6 +46,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description 返回 Prometheus 格式的指标数据。
+         *
+         *     在生产环境中，此端点应在反向代理层面限制访问。
+         */
+        get: operations["metrics_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -701,7 +723,7 @@ export interface components {
          *     - testing：测试专家
          * @enum {string}
          */
-        AgentCapability: "requirement_analysis" | "architecture_design" | "code_generation" | "code_review" | "testing" | "documentation" | "file_operation" | "deployment";
+        AgentCapability: "requirement_analysis" | "architecture_design" | "code_generation" | "code_review" | "testing" | "documentation";
         /**
          * AgentCreate
          * @description 创建 Agent 请求。
@@ -1957,6 +1979,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadyHealthResponse"];
+                };
+            };
+        };
+    };
+    metrics_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
