@@ -3,6 +3,7 @@ import {
   ArrowDown,
   Bot,
   CircleStop,
+  Loader2,
   Menu,
   MessageSquare,
   PanelLeftClose,
@@ -38,6 +39,9 @@ import {
 import { ConnectionStatus } from '../components/connection-status'
 import { KnowledgePanel } from '../components/knowledge-panel'
 import { uploadKnowledgeFiles } from '../api/knowledge'
+import { PreviewPanel } from '../components/preview-panel'
+import { DeploymentPanel } from '../components/deployment-panel'
+import { uploadArtifact, startPreview, createDeployment, decideApproval } from '../api/phase10'
 import { MarkdownContent } from '../components/markdown-content'
 import { useConversationEvents } from '../hooks/use-conversation-events'
 
@@ -80,6 +84,11 @@ export function WorkbenchPage() {
   const [approvalFeedback, setApprovalFeedback] = useState("")
   const [approvalSubmitting, setApprovalSubmitting] = useState(false)
   const [pipelineActive, setPipelineActive] = useState(false)
+  // Phase 10
+  const [previewPanel, setPreviewPanel] = useState<{ previewId: string; artifactId: string; extraArtifactIds?: string[] } | null>(null)
+  const [deploymentPanel, setDeploymentPanel] = useState<{ deploymentId: string } | null>(null)
+  const [artifactApproval, setArtifactApproval] = useState<{ approvalId: string; actionType: string; summary: string; artifactId: string; previewId?: string; deploymentId?: string; extraArtifactIds?: string[] } | null>(null)
+  const [approvalSubmitting2, setApprovalSubmitting2] = useState(false)
   const [failedDraft, setFailedDraft] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null)
@@ -88,6 +97,7 @@ export function WorkbenchPage() {
   const executionAgentMap = useRef<Map<string, string>>(new Map())
   const [uploading, setUploading] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -382,6 +392,123 @@ export function WorkbenchPage() {
     }
   }
 
+  // Phase 10: extract local refs from HTML (css, js, etc.)
+  // 从 HTML/CSS 内容中提取本地资源引用（href、src、@import url）
+  function extractLocalRefs(html: string): string[] {
+    const refs: string[] = []
+    const patterns = [
+      /(?:href|src)\s*=\s*["']([^"']+)["']/gi,       // <link href="..."> <script src="...">
+      /@import\s+(?:url\(["']?|["'])([^"')]+)/gi,       // @import url(...) or @import "..."
+    ]
+    for (const regex of patterns) {
+      for (const m of html.matchAll(regex)) {
+        const r = (m[1] ?? "").trim()
+        if (!r || r.startsWith("http") || r.startsWith("data:") || r.startsWith("#")) continue
+        const fn = r.split("/").pop() ?? r
+        if (/\.(css|js|json|svg|png|jpg|jpeg|gif|ico|woff2?|ttf)$/i.test(fn)) refs.push(fn)
+      }
+    }
+    return [...new Set(refs)]
+  }
+
+  // ?????????????????????????????????????????????? CSS/JS?
+    // 从消息列表中搜索代码块——优先匹配文件名附近的消息，回退到最后匹配
+  function findCodeBlocksByFilename(msgs: { content: string }[], filename: string): string | null {
+    const ext = filename.split(".").pop()?.toLowerCase() ?? ""
+    const langMap: Record<string, string[]> = { css: ["css"], js: ["js", "javascript"] }
+    const langs = langMap[ext] ?? [ext]
+    const langGrp = "(?:" + langs.join("|") + ")"
+    const re = new RegExp("```" + langGrp + "\\s*\\n([\\s\\S]*?)```", "gi")
+    // 遍历消息，最后匹配优先；如果某条消息中包含文件名引用，直接返回其第一个匹配
+    let best: string | null = null
+    const nameRe = new RegExp("\\b" + filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i")
+    for (const msg of msgs) {
+      // 收集本消息所有代码块匹配
+      const blocks: string[] = []
+      for (const mm of msg.content.matchAll(re)) {
+        if (mm[1]) blocks.push(mm[1])
+      }
+      if (blocks.length === 0) continue
+      // 如果消息内容中包含该文件名引用，视为精确匹配
+      if (nameRe.test(msg.content)) return blocks[0]
+      // 否则保留最后一个块的匹配
+      best = blocks[blocks.length - 1]
+    }
+    return best
+  }
+
+  async function handlePreviewHtml(htmlContent: string, fileName: string) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(htmlContent)))
+      const artifact = await uploadArtifact(workspaceConfig.projectId, {
+        artifact_type: "preview", relative_path: fileName || "index.html", content_base64: b64,
+      })
+      const refs = extractLocalRefs(htmlContent)
+      console.debug("[preview] extracted refs:", refs, "from HTML")
+      const extraIds: string[] = []
+      if (refs.length > 0 && (messages as any).data) {
+        console.debug("[preview] searching messages for refs, count:", (messages as any).data.length)
+        for (const ref of refs) {
+          const code = findCodeBlocksByFilename((messages as any).data, ref)
+          console.debug("[preview] ref:", ref, "found:", code ? "yes (" + code.length + " chars)" : "no")
+          if (!code) continue
+          const refB64 = btoa(unescape(encodeURIComponent(code)))
+          const refArtifact = await uploadArtifact(workspaceConfig.projectId, {
+            artifact_type: "preview", relative_path: ref, content_base64: refB64,
+          })
+          extraIds.push(refArtifact.id)
+        }
+      }
+      const result = await startPreview(workspaceConfig.projectId, artifact.id, extraIds.length > 0 ? extraIds : undefined)
+      setArtifactApproval({
+        approvalId: result.approval_id, actionType: "start_preview",
+        summary: "Preview: " + (fileName || "index.html") + (extraIds.length > 0 ? " (+" + extraIds.length + " files)" : ""),
+        artifactId: artifact.id, previewId: result.preview_id, extraArtifactIds: extraIds.length > 0 ? extraIds : undefined,
+      })
+    } catch (err) {
+      setToast({ type: "error", message: err instanceof Error ? err.message : "Preview failed" })
+    }
+  }
+
+  async function handleArtifactApproval(decision: "approved" | "rejected") {
+    if (artifactApproval === null || approvalSubmitting2) return
+    setApprovalSubmitting2(true)
+    try {
+      await decideApproval(workspaceConfig.projectId, artifactApproval.approvalId, decision)
+      if (decision === "approved") {
+        if (artifactApproval.previewId) {
+          setPreviewPanel({ previewId: artifactApproval.previewId, artifactId: artifactApproval.artifactId, extraArtifactIds: artifactApproval.extraArtifactIds })
+        } else if (artifactApproval.deploymentId) {
+          setDeploymentPanel({ deploymentId: artifactApproval.deploymentId })
+        }
+      }
+      setArtifactApproval(null)
+    } catch (err) {
+      setToast({ type: "error", message: err instanceof Error ? err.message : "Approval failed" })
+    } finally {
+      setApprovalSubmitting2(false)
+    }
+  }
+
+  async function handleDeploy(artifactId: string, extraArtifactIds?: string[]) {
+    try {
+      const result = await createDeployment(workspaceConfig.projectId, artifactId, extraArtifactIds)
+      setArtifactApproval({
+        approvalId: result.approval_id, actionType: "deploy", summary: "Deploy to Vercel",
+        artifactId, deploymentId: result.deployment_id,
+      })
+    } catch (err) {
+      setToast({ type: "error", message: err instanceof Error ? err.message : "Deploy failed" })
+    }
+  }
+
+  function autoResizeTextarea() {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.style.height = "auto"
+    ta.style.height = Math.min(ta.scrollHeight, 200) + "px"
+  }
+
   function sendCurrentDraft() {
     const content = draft.trim()
     if (content === '' || selectedConversationId === null || sendMutation.isPending) return
@@ -528,6 +655,32 @@ export function WorkbenchPage() {
         <footer className="sidebar-footer"><ConnectionStatus state={connection} /><span>Phase 8</span></footer>
       </aside>
 
+            {/* Phase 10: Approval dialog */}
+      {artifactApproval ? (
+        <div className="approval-overlay">
+          <div className="approval-dialog">
+            <h4>操作确认</h4>
+            <p>{artifactApproval.summary}</p>
+            {approvalSubmitting2 ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 0" }}>
+                <Loader2 size={20} className="spinner" /><span style={{ fontSize: 14 }}>处理中...</span>
+              </div>
+            ) : (
+              <div className="approval-actions">
+                <button className="approval-btn approval-btn--accept" disabled={approvalSubmitting2} onClick={() => handleArtifactApproval("approved")}>批准</button>
+                <button className="approval-btn approval-btn--reject" disabled={approvalSubmitting2} onClick={() => handleArtifactApproval("rejected")}>拒绝</button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Phase 10: Preview panel */}
+      {previewPanel ? <PreviewPanel projectId={workspaceConfig.projectId} previewId={previewPanel.previewId} onClose={() => setPreviewPanel(null)} onDeploy={() => { if (previewPanel) handleDeploy(previewPanel.artifactId, previewPanel.extraArtifactIds) }} onToast={(t, m) => setToast({ type: t, message: m })} /> : null}
+
+      {/* Phase 10: Deployment panel */}
+      {deploymentPanel ? <DeploymentPanel projectId={workspaceConfig.projectId} deploymentId={deploymentPanel.deploymentId} onClose={() => setDeploymentPanel(null)} /> : null}
+
       {toast ? (
         <div className={'toast toast--' + toast.type} role="alert" onClick={() => setToast(null)}>
           <span>{toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'}</span>
@@ -560,7 +713,7 @@ export function WorkbenchPage() {
               {messages.isPending && !messages.data ? <div className="center-state" role="status">正在加载消息…</div> : null}
               {messages.isError ? <div className="center-state" role="alert"><span>消息加载失败</span><button className="secondary-button" type="button" onClick={() => void messages.refetch()}><RefreshCw aria-hidden="true" size={15} />重试</button></div> : null}
               {messages.data?.length === 0 && visibleStreams.length === 0 ? <div className="center-state"><MessageSquare aria-hidden="true" size={22} /><span>发送第一条消息开始协作</span></div> : null}
-              {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} />)}
+              {messages.data?.map((message) => <MessageRow key={message.id} message={message} agentName={message.agent_id ? agentsById.get(message.agent_id)?.name : undefined} onPreviewHtml={handlePreviewHtml} />)}
               {visibleStreams.map((stream) => (
                 <article key={`execution-${stream.executionId}`} className="message-row message-row--agent message-row--streaming" data-status={stream.status}>
                   <header><Bot aria-hidden={true} size={15} /><strong>{stream.agentName}</strong>{approvalState && approvalState.executionId === stream.executionId ? null : <span>{statusLabel(stream.status)}</span>}</header>
@@ -614,7 +767,7 @@ export function WorkbenchPage() {
               {sendMutation.isError ? <div className="composer-error" role="alert"><span>消息发送失败。</span><button type="button" onClick={() => { if (failedDraft !== null) sendMutation.mutate({ conversationId: selectedConversationId, content: failedDraft }); }}><RefreshCw aria-hidden="true" size={14} />重试</button></div> : null}
               <label className="sr-only" htmlFor="message-input">输入消息</label>
               <div className="composer-input-wrap">
-                <textarea id="message-input" value={draft} rows={3} placeholder={activeConversation && isGroupConversation(activeConversation) ? '输入 @ 点名参与 Agent' : '输入消息，Enter 发送，Shift + Enter 换行'} onChange={(event) => { setDraft(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter' && mentionSuggestions.length > 0) { event.preventDefault(); const first = mentionSuggestions[0]; if (first) insertMention(first.name); return } if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendCurrentDraft() } }} />
+                <textarea ref={textareaRef} id="message-input" value={draft} rows={1} onInput={autoResizeTextarea} placeholder={activeConversation && isGroupConversation(activeConversation) ? '输入 @ 点名参与 Agent' : '输入消息，Enter 发送，Shift + Enter 换行'} onChange={(event) => { setDraft(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter' && mentionSuggestions.length > 0) { event.preventDefault(); const first = mentionSuggestions[0]; if (first) insertMention(first.name); return } if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendCurrentDraft() } }} />
                 {mentionSuggestions.length > 0 ? <div className="mention-suggestions" role="listbox" aria-label="@Agent 建议">{mentionSuggestions.map((agent) => <button type="button" role="option" aria-selected="false" key={agent.id} onMouseDown={(event) => { event.preventDefault(); insertMention(agent.name) }}><Bot aria-hidden="true" size={14} /><span>{agent.name}</span><small>{agent.agent_type}</small></button>)}</div> : null}
               </div>
               <div className="composer-toolbar">
@@ -644,11 +797,11 @@ export function WorkbenchPage() {
   )
 }
 
-function MessageRow({ message, agentName }: { message: Message; agentName?: string }) {
+function MessageRow({ message, agentName, onPreviewHtml }: { message: Message; agentName?: string; onPreviewHtml?: (html: string, fileName: string) => void }) {
   return (
     <article className={`message-row message-row--${message.role}`}>
       <header><strong>{message.role === 'user' ? '你' : message.role === 'agent' ? agentName ?? 'Agent' : '系统'}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></header>
-      <MarkdownContent content={message.content} hideCodeBlocks={false} />
+      <MarkdownContent content={message.content} hideCodeBlocks={false} onPreviewHtml={onPreviewHtml ? (html: string) => onPreviewHtml(html, "agent-output.html") : undefined} />
     </article>
   )
 }

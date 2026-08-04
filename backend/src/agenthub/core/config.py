@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     embedding_api_key: SecretStr | None = None
     embedding_model: str = "BAAI/bge-m3"
 
+    # Phase 10: Vercel 部署配置——缺失时部署功能降级但不阻塞应用启动
+    vercel_token: SecretStr | None = None
+    vercel_team_id: str | None = None
+
+    # Phase 10: 本地预览端口范围——避免与系统服务冲突
+    preview_port_range_start: int = 18000
+    preview_port_range_end: int = 18999
+
     def runtime_dependencies(self) -> RuntimeDependencies:
         """校验后续阶段连接数据库和 Orchestrator 所需的配置。
         错误消息只列出环境变量名称，调用方可以安全记录该消息；任何已提供的密钥值

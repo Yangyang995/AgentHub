@@ -214,7 +214,7 @@ class EventEnvelope(BaseModel):
 
     event_id: uuid.UUID
     conversation_id: uuid.UUID
-    execution_id: uuid.UUID
+    execution_id: uuid.UUID | None
     sequence: int = Field(ge=0)
     type: str
     timestamp: datetime
@@ -329,7 +329,7 @@ class ArtifactResponse(BaseModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
-    execution_id: uuid.UUID
+    execution_id: uuid.UUID | None
     artifact_type: ArtifactType
     relative_path: str
     content_hash: str
@@ -411,7 +411,7 @@ class UsageEventCreate(BaseModel):
     """创建用量事件请求。"""
 
     agent_id: uuid.UUID
-    execution_id: uuid.UUID
+    execution_id: uuid.UUID | None
     event_type: str = Field(min_length=1, max_length=50)
     call_count: int = Field(ge=0, default=1)
     token_count: int | None = None
@@ -427,7 +427,7 @@ class UsageEventResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     agent_id: uuid.UUID
-    execution_id: uuid.UUID
+    execution_id: uuid.UUID | None
     event_type: str
     call_count: int
     token_count: int | None

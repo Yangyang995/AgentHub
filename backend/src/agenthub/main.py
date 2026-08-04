@@ -19,17 +19,23 @@ from agenthub.adapters import (
     OpenAICompatibleAdapter,
 )
 from agenthub.api.routes.agents import router as agents_router
-from agenthub.api.routes.knowledge import router as knowledge_router
-from agenthub.api.routes.memories import router as memories_router
+from agenthub.api.routes.approvals import router as approvals_router
+from agenthub.api.routes.artifacts import router as artifacts_router
 from agenthub.api.routes.chat import router as chat_router
 from agenthub.api.routes.chat import websocket_router
+from agenthub.api.routes.deployments import router as deployments_router
 from agenthub.api.routes.health import router as health_router
+from agenthub.api.routes.knowledge import router as knowledge_router
+from agenthub.api.routes.memories import router as memories_router
+from agenthub.api.routes.previews import router as previews_router
 from agenthub.api.routes.projects import router as projects_router
 from agenthub.core.config import Settings, get_settings
 from agenthub.models.enums import AgentType
 from agenthub.models.orm import Agent
 from agenthub.services.agents import AgentService
 from agenthub.services.chat import AgentAdapter, ChatService
+from agenthub.services.deployment import DeploymentService
+from agenthub.services.preview import PreviewService
 from agenthub.services.project import ProjectService
 from agenthub.services.prompt_loader import load_system_prompt
 from agenthub.services.realtime import ConversationEventBroker
@@ -42,9 +48,11 @@ async def _run_forgetting_periodic(application) -> None:
     失败不传播异常，仅记录日志。
     """
     import logging
-    from agenthub.rag.memory.forgetting import ForgettingManager
-    from agenthub.models.orm import Project
+
     from sqlalchemy import select
+
+    from agenthub.models.orm import Project
+    from agenthub.rag.memory.forgetting import ForgettingManager
 
     logger = logging.getLogger(__name__)
     await asyncio.sleep(300)
@@ -128,13 +136,17 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):  # type: ignore[no-untyped-def]
-        """??????????????????????????"""
-        # ????????????? 24 ??????????
+        """应用生命周期管理——启动时初始化服务，关闭时清理资源。"""
+        # 启动遗忘策略后台任务——每 24 小时扫描过期偏好
         forgetting_task = asyncio.create_task(_run_forgetting_periodic(application))
         application.state.execution_tasks.add(forgetting_task)
         try:
             yield
         finally:
+            # Phase 10: 关闭所有活跃预览子进程并清理临时目录
+            preview_svc = getattr(application.state, "preview_service", None)
+            if preview_svc is not None:
+                await preview_svc.cleanup_all()
             forgetting_task.cancel()
             tasks: set[asyncio.Task[None]] = application.state.execution_tasks
             for task in tasks:
@@ -168,11 +180,18 @@ def create_app(
             broker,
             adapter_resolver or _default_adapter_resolver(resolved_settings),
         )
+        # Phase 10: 关闭所有活跃预览子进程并清理临时目录
+        application.state.preview_service = PreviewService(factory, broker)
+        application.state.deployment_service = DeploymentService(factory, broker)
     application.include_router(health_router)
     application.include_router(projects_router)
     application.include_router(agents_router)
+    application.include_router(approvals_router)
+    application.include_router(artifacts_router)
+    application.include_router(deployments_router)
     application.include_router(knowledge_router)
     application.include_router(memories_router)
+    application.include_router(previews_router)
     application.include_router(chat_router)
     application.include_router(websocket_router)
 

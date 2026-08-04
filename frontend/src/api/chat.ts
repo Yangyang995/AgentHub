@@ -1,4 +1,4 @@
-﻿import type { components } from './generated/schema'
+import type { components } from './generated/schema'
 
 export type Agent = components['schemas']['AgentResponse']
 export type Project = components['schemas']['ProjectResponse']

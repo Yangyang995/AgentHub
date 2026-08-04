@@ -552,7 +552,7 @@ class Artifact(Base):
     execution_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agent_executions.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
         comment="产生此产出物的执行",
     )

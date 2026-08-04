@@ -146,6 +146,156 @@ export interface paths {
         patch: operations["update_agent_api_v1_projects__project_id__agents__agent_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Approvals
+         * @description 列出项目下所有待处理的审批。
+         */
+        get: operations["list_approvals_api_v1_projects__project_id__approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/approvals/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Approval
+         * @description 获取审批详情。
+         */
+        get: operations["get_approval_api_v1_projects__project_id__approvals__approval_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/approvals/{approval_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Approval
+         * @description 批准或拒绝审批。
+         *
+         *     审批通过后，根据 action_type 自动触发后续动作：
+         *     - START_PREVIEW → 启动本地预览子进程
+         *     - DEPLOY → 执行 Vercel 部署
+         */
+        post: operations["decide_approval_api_v1_projects__project_id__approvals__approval_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Artifacts
+         * @description 列出项目下的产出物。
+         */
+        get: operations["list_artifacts_api_v1_projects__project_id__artifacts_get"];
+        put?: never;
+        /**
+         * Upload Artifact
+         * @description 注册新的产出物——保存内容到磁盘并创建数据库记录。
+         */
+        post: operations["upload_artifact_api_v1_projects__project_id__artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact
+         * @description 获取产出物元数据。
+         */
+        get: operations["get_artifact_api_v1_projects__project_id__artifacts__artifact_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Deployment
+         * @description 为指定产出物创建 Vercel 部署。
+         *
+         *     返回审批 ID——前端需等待用户审批通过后，后端自动执行部署。
+         */
+        post: operations["create_deployment_api_v1_projects__project_id__artifacts__artifact_id__deploy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/deployments/{deployment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Deployment Status
+         * @description 查询部署状态和结果 URL。
+         */
+        get: operations["get_deployment_status_api_v1_projects__project_id__deployments__deployment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/knowledge/upload": {
         parameters: {
             query?: never;
@@ -380,6 +530,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Preview
+         * @description 为指定产出物启动预览流程。
+         *
+         *     body.extra_artifact_ids: 可选的额外产出物 ID 列表（如 CSS/JS 文件），会被复制到同一预览目录。
+         *     返回审批 ID——前端需等待用户审批通过后，后端自动启动预览。
+         */
+        post: operations["start_preview_api_v1_projects__project_id__artifacts__artifact_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/previews/{preview_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Preview Status
+         * @description 获取预览运行状态。
+         */
+        get: operations["get_preview_status_api_v1_projects__project_id__previews__preview_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Stop Preview
+         * @description 停止预览——终止子进程并清理临时目录。
+         */
+        delete: operations["stop_preview_api_v1_projects__project_id__previews__preview_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/conversations": {
         parameters: {
             query?: never;
@@ -466,6 +663,23 @@ export interface paths {
          * @description 取消执行并返回已持久化的最终事件。
          */
         post: operations["cancel_execution_api_v1_projects__project_id__executions__execution_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/pipeline/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Pipeline */
+        post: operations["resume_pipeline_api_v1_projects__project_id__conversations__conversation_id__pipeline_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -610,6 +824,131 @@ export interface components {
             /** Adapter Config Ref */
             adapter_config_ref?: string | null;
         };
+        /**
+         * ApprovalActionType
+         * @description 需要审批的高风险动作类型。
+         * @enum {string}
+         */
+        ApprovalActionType: "write_file" | "apply_diff" | "run_command" | "start_preview" | "deploy";
+        /**
+         * ApprovalDecide
+         * @description 审批决定请求。
+         */
+        ApprovalDecide: {
+            /** @description 只能为 approved 或 rejected */
+            decision: components["schemas"]["ApprovalStatus"];
+            /** Decided By */
+            decided_by?: string | null;
+        };
+        /**
+         * ApprovalResponse
+         * @description 审批响应。
+         */
+        ApprovalResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Execution Id */
+            execution_id: string | null;
+            action_type: components["schemas"]["ApprovalActionType"];
+            /** Summary */
+            summary: string;
+            /** Content Hash */
+            content_hash: string;
+            status: components["schemas"]["ApprovalStatus"];
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By */
+            decided_by: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ApprovalStatus
+         * @description 审批记录的当前状态。
+         * @enum {string}
+         */
+        ApprovalStatus: "pending" | "approved" | "rejected";
+        /**
+         * ArtifactResponse
+         * @description 产出物响应。
+         */
+        ArtifactResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Execution Id */
+            execution_id: string | null;
+            artifact_type: components["schemas"]["ArtifactType"];
+            /** Relative Path */
+            relative_path: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Size */
+            size: number;
+            /** Metadata Json */
+            metadata_json: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ArtifactType
+         * @description Agent 产出物类型，决定前端展示和后续动作。
+         * @enum {string}
+         */
+        ArtifactType: "file" | "diff" | "preview" | "report" | "deployment_config";
+        /**
+         * ArtifactUploadRequest
+         * @description 产出物上传请求——包含类型、路径和 Base64 编码内容。
+         */
+        ArtifactUploadRequest: {
+            /** @description 产出物类型 */
+            artifact_type: components["schemas"]["ArtifactType"];
+            /**
+             * Relative Path
+             * @description 相对路径
+             */
+            relative_path: string;
+            /**
+             * Content Base64
+             * @description Base64 编码的文件内容
+             */
+            content_base64: string;
+            /**
+             * Execution Id
+             * @description 关联的执行 ID
+             */
+            execution_id?: string | null;
+            /**
+             * Metadata
+             * @description 扩展元数据
+             */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** Body_upload_files_api_v1_projects__project_id__knowledge_upload_post */
         Body_upload_files_api_v1_projects__project_id__knowledge_upload_post: {
             /** Files */
@@ -729,6 +1068,82 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * DeploymentProvider
+         * @description 部署目标平台。首版仅支持 Vercel。
+         * @enum {string}
+         */
+        DeploymentProvider: "vercel";
+        /**
+         * DeploymentResponse
+         * @description 部署响应。
+         */
+        DeploymentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Artifact Id */
+            artifact_id: string | null;
+            provider: components["schemas"]["DeploymentProvider"];
+            status: components["schemas"]["DeploymentStatus"];
+            /** Target Url */
+            target_url: string | null;
+            /** Result Url */
+            result_url: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DeploymentStartRequest
+         * @description 部署启动请求——可选额外产出物 ID 列表。
+         */
+        DeploymentStartRequest: {
+            /** Extra Artifact Ids */
+            extra_artifact_ids?: string[] | null;
+        };
+        /**
+         * DeploymentStartResponse
+         * @description 部署启动响应——包含审批 ID。
+         */
+        DeploymentStartResponse: {
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * Deployment Id
+             * Format: uuid
+             */
+            deployment_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * DeploymentStatus
+         * @description 部署生命周期状态。
+         * @enum {string}
+         */
+        DeploymentStatus: "pending" | "preparing" | "uploading" | "building" | "completed" | "failed" | "cancelled";
         /**
          * ExecutionStatus
          * @description Agent 执行生命周期状态。
@@ -924,6 +1339,20 @@ export interface components {
             message: components["schemas"]["MessageResponse"];
             execution: components["schemas"]["AgentExecutionResponse"];
         };
+        /** PipelineResumeRequest */
+        PipelineResumeRequest: {
+            /**
+             * Action
+             * @description accept | reject | modify
+             */
+            action: string;
+            /**
+             * Feedback
+             * @description 用户修改意见
+             * @default
+             */
+            feedback: string;
+        };
         /**
          * PreferenceCreate
          * @description 创建偏好请求。
@@ -979,6 +1408,51 @@ export interface components {
             value?: string | null;
             /** Importance */
             importance?: number | null;
+        };
+        /**
+         * PreviewStartRequest
+         * @description 预览启动请求——可选额外产出物 ID 列表。
+         */
+        PreviewStartRequest: {
+            /** Extra Artifact Ids */
+            extra_artifact_ids?: string[] | null;
+        };
+        /**
+         * PreviewStartResponse
+         * @description 预览启动响应——包含审批 ID，前端据此展示审批对话框。
+         */
+        PreviewStartResponse: {
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * Preview Id
+             * Format: uuid
+             */
+            preview_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * PreviewStatusResponse
+         * @description 预览状态响应。
+         */
+        PreviewStatusResponse: {
+            /**
+             * Preview Id
+             * Format: uuid
+             */
+            preview_id: string;
+            /** Status */
+            status: string;
+            /** Url */
+            url?: string | null;
+            /** Port */
+            port?: number | null;
+            /** Error */
+            error?: string | null;
         };
         /**
          * ProjectCreate
@@ -1155,11 +1629,8 @@ export interface components {
              * Format: uuid
              */
             conversation_id: string;
-            /**
-             * Execution Id
-             * Format: uuid
-             */
-            execution_id: string;
+            /** Execution Id */
+            execution_id: string | null;
             /** Sequence */
             sequence: number;
             /** Type */
@@ -1772,6 +2243,274 @@ export interface operations {
             };
         };
     };
+    list_approvals_api_v1_projects__project_id__approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_approval_api_v1_projects__project_id__approvals__approval_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_approval_api_v1_projects__project_id__approvals__approval_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecide"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artifacts_api_v1_projects__project_id__artifacts_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_artifact_api_v1_projects__project_id__artifacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_api_v1_projects__project_id__artifacts__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_deployment_api_v1_projects__project_id__artifacts__artifact_id__deploy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeploymentStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_deployment_status_api_v1_projects__project_id__deployments__deployment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_files_api_v1_projects__project_id__knowledge_upload_post: {
         parameters: {
             query?: never;
@@ -2205,6 +2944,108 @@ export interface operations {
             };
         };
     };
+    start_preview_api_v1_projects__project_id__artifacts__artifact_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PreviewStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preview_status_api_v1_projects__project_id__previews__preview_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preview_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_preview_api_v1_projects__project_id__previews__preview_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preview_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_conversations_api_v1_projects__project_id__conversations_get: {
         parameters: {
             query?: never;
@@ -2412,6 +3253,44 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_pipeline_api_v1_projects__project_id__conversations__conversation_id__pipeline_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineResumeRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

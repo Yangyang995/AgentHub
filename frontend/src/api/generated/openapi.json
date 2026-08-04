@@ -462,6 +462,464 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/approvals": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "List Approvals",
+        "description": "列出项目下所有待处理的审批。",
+        "operationId": "list_approvals_api_v1_projects__project_id__approvals_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApprovalResponse"
+                  },
+                  "title": "Response List Approvals Api V1 Projects  Project Id  Approvals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/approvals/{approval_id}": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Get Approval",
+        "description": "获取审批详情。",
+        "operationId": "get_approval_api_v1_projects__project_id__approvals__approval_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Approval Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/approvals/{approval_id}/decide": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Decide Approval",
+        "description": "批准或拒绝审批。\n\n审批通过后，根据 action_type 自动触发后续动作：\n- START_PREVIEW → 启动本地预览子进程\n- DEPLOY → 执行 Vercel 部署",
+        "operationId": "decide_approval_api_v1_projects__project_id__approvals__approval_id__decide_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Approval Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecide"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/artifacts": {
+      "post": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Upload Artifact",
+        "description": "注册新的产出物——保存内容到磁盘并创建数据库记录。",
+        "operationId": "upload_artifact_api_v1_projects__project_id__artifacts_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "List Artifacts",
+        "description": "列出项目下的产出物。",
+        "operationId": "list_artifacts_api_v1_projects__project_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactResponse"
+                  },
+                  "title": "Response List Artifacts Api V1 Projects  Project Id  Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Get Artifact",
+        "description": "获取产出物元数据。",
+        "operationId": "get_artifact_api_v1_projects__project_id__artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/deploy": {
+      "post": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Create Deployment",
+        "description": "为指定产出物创建 Vercel 部署。\n\n返回审批 ID——前端需等待用户审批通过后，后端自动执行部署。",
+        "operationId": "create_deployment_api_v1_projects__project_id__artifacts__artifact_id__deploy_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentStartRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/deployments/{deployment_id}": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Get Deployment Status",
+        "description": "查询部署状态和结果 URL。",
+        "operationId": "get_deployment_status_api_v1_projects__project_id__deployments__deployment_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/knowledge/upload": {
       "post": {
         "tags": [
@@ -1204,6 +1662,180 @@
         }
       }
     },
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/preview": {
+      "post": {
+        "tags": [
+          "previews"
+        ],
+        "summary": "Start Preview",
+        "description": "为指定产出物启动预览流程。\n\nbody.extra_artifact_ids: 可选的额外产出物 ID 列表（如 CSS/JS 文件），会被复制到同一预览目录。\n返回审批 ID——前端需等待用户审批通过后，后端自动启动预览。",
+        "operationId": "start_preview_api_v1_projects__project_id__artifacts__artifact_id__preview_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewStartRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/previews/{preview_id}": {
+      "get": {
+        "tags": [
+          "previews"
+        ],
+        "summary": "Get Preview Status",
+        "description": "获取预览运行状态。",
+        "operationId": "get_preview_status_api_v1_projects__project_id__previews__preview_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Preview Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "previews"
+        ],
+        "summary": "Stop Preview",
+        "description": "停止预览——终止子进程并清理临时目录。",
+        "operationId": "stop_preview_api_v1_projects__project_id__previews__preview_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Preview Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Stop Preview Api V1 Projects  Project Id  Previews  Preview Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_id}/conversations": {
       "post": {
         "tags": [
@@ -1609,6 +2241,71 @@
           }
         }
       }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/pipeline/resume": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Resume Pipeline",
+        "operationId": "resume_pipeline_api_v1_projects__project_id__conversations__conversation_id__pipeline_resume_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineResumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Resume Pipeline Api V1 Projects  Project Id  Conversations  Conversation Id  Pipeline Resume Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1927,6 +2624,276 @@
         "title": "AgentUpdate",
         "description": "更新 Agent 请求。"
       },
+      "ApprovalActionType": {
+        "type": "string",
+        "enum": [
+          "write_file",
+          "apply_diff",
+          "run_command",
+          "start_preview",
+          "deploy"
+        ],
+        "title": "ApprovalActionType",
+        "description": "需要审批的高风险动作类型。"
+      },
+      "ApprovalDecide": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ApprovalStatus",
+            "description": "只能为 approved 或 rejected"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "ApprovalDecide",
+        "description": "审批决定请求。"
+      },
+      "ApprovalResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "action_type": {
+            "$ref": "#/components/schemas/ApprovalActionType"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "execution_id",
+          "action_type",
+          "summary",
+          "content_hash",
+          "status",
+          "decided_at",
+          "decided_by",
+          "created_at"
+        ],
+        "title": "ApprovalResponse",
+        "description": "审批响应。"
+      },
+      "ApprovalStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected"
+        ],
+        "title": "ApprovalStatus",
+        "description": "审批记录的当前状态。"
+      },
+      "ArtifactResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "artifact_type": {
+            "$ref": "#/components/schemas/ArtifactType"
+          },
+          "relative_path": {
+            "type": "string",
+            "title": "Relative Path"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "metadata_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Json"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "execution_id",
+          "artifact_type",
+          "relative_path",
+          "content_hash",
+          "size",
+          "metadata_json",
+          "created_at"
+        ],
+        "title": "ArtifactResponse",
+        "description": "产出物响应。"
+      },
+      "ArtifactType": {
+        "type": "string",
+        "enum": [
+          "file",
+          "diff",
+          "preview",
+          "report",
+          "deployment_config"
+        ],
+        "title": "ArtifactType",
+        "description": "Agent 产出物类型，决定前端展示和后续动作。"
+      },
+      "ArtifactUploadRequest": {
+        "properties": {
+          "artifact_type": {
+            "$ref": "#/components/schemas/ArtifactType",
+            "description": "产出物类型"
+          },
+          "relative_path": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Relative Path",
+            "description": "相对路径"
+          },
+          "content_base64": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Base64",
+            "description": "Base64 编码的文件内容"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id",
+            "description": "关联的执行 ID"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "扩展元数据"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "relative_path",
+          "content_base64"
+        ],
+        "title": "ArtifactUploadRequest",
+        "description": "产出物上传请求——包含类型、路径和 Base64 编码内容。"
+      },
       "Body_upload_files_api_v1_projects__project_id__knowledge_upload_post": {
         "properties": {
           "files": {
@@ -2215,6 +3182,179 @@
         ],
         "title": "DeleteResponse",
         "description": "删除响应。"
+      },
+      "DeploymentProvider": {
+        "type": "string",
+        "enum": [
+          "vercel"
+        ],
+        "title": "DeploymentProvider",
+        "description": "部署目标平台。首版仅支持 Vercel。"
+      },
+      "DeploymentResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/DeploymentProvider"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeploymentStatus"
+          },
+          "target_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Url"
+          },
+          "result_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Url"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "approval_id",
+          "artifact_id",
+          "provider",
+          "status",
+          "target_url",
+          "result_url",
+          "error_code",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeploymentResponse",
+        "description": "部署响应。"
+      },
+      "DeploymentStartRequest": {
+        "properties": {
+          "extra_artifact_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Artifact Ids"
+          }
+        },
+        "type": "object",
+        "title": "DeploymentStartRequest",
+        "description": "部署启动请求——可选额外产出物 ID 列表。"
+      },
+      "DeploymentStartResponse": {
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Approval Id"
+          },
+          "deployment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Deployment Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approval_id",
+          "deployment_id",
+          "message"
+        ],
+        "title": "DeploymentStartResponse",
+        "description": "部署启动响应——包含审批 ID。"
+      },
+      "DeploymentStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "preparing",
+          "uploading",
+          "building",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "DeploymentStatus",
+        "description": "部署生命周期状态。"
       },
       "ExecutionStatus": {
         "type": "string",
@@ -2591,6 +3731,26 @@
         "title": "MessageSubmissionResponse",
         "description": "原子创建的用户消息和待执行记录。"
       },
+      "PipelineResumeRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "accept | reject | modify"
+          },
+          "feedback": {
+            "type": "string",
+            "title": "Feedback",
+            "description": "用户修改意见",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "PipelineResumeRequest"
+      },
       "PreferenceCreate": {
         "properties": {
           "category": {
@@ -2722,6 +3882,107 @@
         "type": "object",
         "title": "PreferenceUpdate",
         "description": "更新偏好请求。"
+      },
+      "PreviewStartRequest": {
+        "properties": {
+          "extra_artifact_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Artifact Ids"
+          }
+        },
+        "type": "object",
+        "title": "PreviewStartRequest",
+        "description": "预览启动请求——可选额外产出物 ID 列表。"
+      },
+      "PreviewStartResponse": {
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Approval Id"
+          },
+          "preview_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Preview Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approval_id",
+          "preview_id",
+          "message"
+        ],
+        "title": "PreviewStartResponse",
+        "description": "预览启动响应——包含审批 ID，前端据此展示审批对话框。"
+      },
+      "PreviewStatusResponse": {
+        "properties": {
+          "preview_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Preview Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview_id",
+          "status"
+        ],
+        "title": "PreviewStatusResponse",
+        "description": "预览状态响应。"
       },
       "ProjectCreate": {
         "properties": {
@@ -3069,9 +4330,16 @@
             "type": "string"
           },
           "execution_id": {
-            "format": "uuid",
-            "title": "Execution Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
           },
           "sequence": {
             "minimum": 0,
