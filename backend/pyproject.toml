@@ -19,6 +19,8 @@ dependencies = [
     "lxml>=5.0.0",
     "python-multipart>=0.0.20",
     "langgraph>=0.2.0",
+    "prometheus-client>=0.26.0",
+    "structlog>=26.1.0",
 ]
 
 [dependency-groups]

@@ -1,10 +1,11 @@
-"""AgentHub FastAPI 应用入口。"""
+﻿"""AgentHub FastAPI 应用入口。"""
 
 import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -18,6 +19,7 @@ from agenthub.adapters import (
     MockScriptStep,
     OpenAICompatibleAdapter,
 )
+from agenthub.api.middleware import register_middleware
 from agenthub.api.routes.agents import router as agents_router
 from agenthub.api.routes.approvals import router as approvals_router
 from agenthub.api.routes.artifacts import router as artifacts_router
@@ -27,9 +29,11 @@ from agenthub.api.routes.deployments import router as deployments_router
 from agenthub.api.routes.health import router as health_router
 from agenthub.api.routes.knowledge import router as knowledge_router
 from agenthub.api.routes.memories import router as memories_router
+from agenthub.api.routes.metrics import router as metrics_router
 from agenthub.api.routes.previews import router as previews_router
 from agenthub.api.routes.projects import router as projects_router
 from agenthub.core.config import Settings, get_settings
+from agenthub.core.logging import setup_logging
 from agenthub.models.enums import AgentType
 from agenthub.models.orm import Agent
 from agenthub.services.agents import AgentService
@@ -183,7 +187,15 @@ def create_app(
         # Phase 10: 关闭所有活跃预览子进程并清理临时目录
         application.state.preview_service = PreviewService(factory, broker)
         application.state.deployment_service = DeploymentService(factory, broker)
+
+    # Phase 11: 结构日志配置——JSON 格式用于容器环境
+    setup_logging(json_format=resolved_settings.environment != "development")
+
+    # Phase 11: 注册安全/可观测性中间件（速率限制、请求追踪、指标）
+    register_middleware(application)
+
     application.include_router(health_router)
+    application.include_router(metrics_router)
     application.include_router(projects_router)
     application.include_router(agents_router)
     application.include_router(approvals_router)

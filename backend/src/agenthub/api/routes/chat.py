@@ -1,4 +1,4 @@
-"""Phase 4 单聊 REST 与 WebSocket 协议路由。"""
+﻿"""Phase 4 单聊 REST 与 WebSocket 协议路由。"""
 
 import asyncio
 import uuid
@@ -17,6 +17,7 @@ from fastapi import (
 
 from pydantic import BaseModel, Field
 
+from agenthub.core.limits import get_rate_limiter
 from agenthub.schemas.domain import (
     ConversationCreate,
     ConversationResponse,
@@ -198,6 +199,14 @@ async def conversation_events(
     cursor: Annotated[list[str] | None, Query()] = None,
 ) -> None:
     """推送实时事件，并按一个或多个执行游标补发遗漏事件。"""
+    limiter = get_rate_limiter()
+    # Phase 11: 检查 WebSocket 并发连接限制
+    try:
+        await limiter.track_ws_connect(conversation_id)
+    except Exception:
+        await websocket.close(code=4429, reason="Too many connections")
+        return
+
     service: ChatService = websocket.app.state.chat_service
     broker = websocket.app.state.event_broker
     queue = await broker.subscribe(conversation_id)
@@ -253,3 +262,5 @@ async def conversation_events(
         pass
     finally:
         await broker.unsubscribe(conversation_id, queue)
+        # Phase 11: 释放 WebSocket 连接计数
+        await limiter.track_ws_disconnect(conversation_id)

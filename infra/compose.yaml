@@ -1,6 +1,7 @@
 ﻿name: agenthub
 
 services:
+  # ── PostgreSQL + pgvector ──────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg18
     environment:
@@ -18,6 +19,63 @@ services:
       retries: 10
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - agenthub-net
+
+  # ── FastAPI 后端 ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/backend.Dockerfile
+    environment:
+      AGENTHUB_ENVIRONMENT: ${AGENTHUB_ENVIRONMENT:-development}
+      AGENTHUB_DATABASE_URL: postgresql+asyncpg://${AGENTHUB_POSTGRES_USER:-agenthub}:${AGENTHUB_POSTGRES_PASSWORD:-YOUR_DATABASE_PASSWORD_HERE}@postgres:5432/${AGENTHUB_POSTGRES_DB:-agenthub}
+      AGENTHUB_LLM_BASE_URL: ${AGENTHUB_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      AGENTHUB_LLM_API_KEY: ${AGENTHUB_LLM_API_KEY:-YOUR_API_KEY_HERE}
+      AGENTHUB_LLM_MODEL: ${AGENTHUB_LLM_MODEL:-deepseek-chat}
+      AGENTHUB_EMBEDDING_BASE_URL: ${AGENTHUB_EMBEDDING_BASE_URL:-}
+      AGENTHUB_EMBEDDING_API_KEY: ${AGENTHUB_EMBEDDING_API_KEY:-}
+      AGENTHUB_EMBEDDING_MODEL: ${AGENTHUB_EMBEDDING_MODEL:-BAAI/bge-m3}
+      AGENTHUB_VERCEL_TOKEN: ${AGENTHUB_VERCEL_TOKEN:-}
+      AGENTHUB_LOG_LEVEL: ${AGENTHUB_LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - agenthub-net
+
+  # ── React 前端（Nginx） ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/frontend.Dockerfile
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - agenthub-net
+
+networks:
+  agenthub-net:
+    driver: bridge
 
 volumes:
   agenthub-postgres-data:

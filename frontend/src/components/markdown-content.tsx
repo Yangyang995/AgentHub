@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+﻿import React, { useCallback, useRef, useState } from 'react'
 import { Check, Copy, Play } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -45,7 +45,7 @@ function CopyButton({ text }: { text: string }) {
 function isHtmlContent(text: string): boolean {
   const trimmed = text.trim()
   return /^<!DOCTYPE\s/i.test(trimmed) || /^<html/i.test(trimmed)
-    || /^<(head|body|div|section|article|main|header|footer|nav|aside|form|table|ul|ol|h[1-6])/i.test(trimmed)
+    || /^<(head|body|div|section|article|main|header|footer|nav|aside|form|table|ul|ol|h[1-6])\b/i.test(trimmed)
 }
 
 /** 自定义 pre 渲染器，包裹 CopyButton 和 HTML 预览按钮 */
@@ -91,7 +91,7 @@ export function MarkdownContent({ content, hideCodeBlocks, truncateAtCodeBlock, 
     displayContent = content
   }
   return (
-    <div className="markdown-content">
+    <div className="markdown-content" data-testid="markdown-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{ pre: (props) => <PreWithCopy {...props} onPreviewHtml={onPreviewHtml} /> }}

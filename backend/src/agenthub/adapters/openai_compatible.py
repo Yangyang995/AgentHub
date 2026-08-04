@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
-
-logger = logging.getLogger(__name__)
+import time
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -25,6 +23,13 @@ from agenthub.adapters.protocol import (
     ExecutionErrorEvent,
     ExecutionStatusEvent,
 )
+from agenthub.core.logging import get_logger
+from agenthub.core.metrics import (
+    adapter_calls_total,
+    adapter_execution_duration_seconds,
+)
+
+logger = get_logger(__name__)
 
 
 class OpenAICompatibleAdapter:
@@ -86,10 +91,16 @@ class OpenAICompatibleAdapter:
     async def _stream(self, task: AgentTask) -> AsyncIterator[AgentEvent]:
         sequence = 0
         started_at = datetime.now(UTC)
+        perf_start = time.perf_counter()
         final_status: Literal["succeeded", "failed", "cancelled"] = "failed"
         error_code: AdapterErrorCode | None = None
         error_message: str | None = None
         received_content = False
+
+        logger.info("adapter.stream.start",
+                     execution_id=str(task.execution_id),
+                     model=self._model,
+                     message_len=len(task.message_content))
 
         yield ExecutionStatusEvent(
             execution_id=task.execution_id,
@@ -118,6 +129,9 @@ class OpenAICompatibleAdapter:
                     self._active_response = response
                     if response.status_code >= 400:
                         error_code, error_message = self._http_error(response.status_code)
+                        logger.warning("adapter.stream.http_error",
+                                        status_code=response.status_code,
+                                        error_code=error_code)
                     else:
                         async for line in response.aiter_lines():
                             if self._cancel_event.is_set():
@@ -130,85 +144,114 @@ class OpenAICompatibleAdapter:
                                 continue
                             if delta == "[DONE]":
                                 continue
+                            received_content = True
                             yield ContentDeltaEvent(
                                 execution_id=task.execution_id,
                                 sequence=sequence,
                                 delta=delta,
                                 content_type="markdown",
                             )
-                            received_content = True
                             sequence += 1
-                        else:
-                            # 兼容供应商以关闭流表示完成，但无文本响应不能被保存为空白成功消息。
-                            if received_content:
-                                final_status = "succeeded"
-                            else:
-                                error_code = AdapterErrorCode.INVALID_RESPONSE
-                                error_message = "模型服务未返回文本内容"
-        except httpx.TimeoutException:
-            error_code = AdapterErrorCode.TIMEOUT
-            error_message = "模型服务响应超时"
-        except httpx.RequestError:
-            error_code = AdapterErrorCode.UNAVAILABLE
-            error_message = "无法连接模型服务"
-        except (json.JSONDecodeError, ValueError, TypeError):
-            error_code = AdapterErrorCode.INVALID_RESPONSE
-            error_message = "模型服务返回了无效的流式响应"
-        finally:
-            self._active_response = None
-
-        if self._cancel_event.is_set() and final_status != "succeeded":
+            if received_content and error_code is None:
+                final_status = "succeeded"
+            elif not received_content and error_code is None and final_status != "cancelled":
+                error_code = AdapterErrorCode.INVALID_RESPONSE
+                error_message = "模型未返回内容"
+                logger.warning("adapter.stream.empty_response",
+                               execution_id=str(task.execution_id))
+        except asyncio.CancelledError:
             final_status = "cancelled"
             error_code = AdapterErrorCode.CANCELLED
             error_message = "执行已取消"
-        elif final_status != "succeeded" and error_code is None:
-            error_code = AdapterErrorCode.EXECUTION_FAILED
-            error_message = "模型执行失败"
+            logger.info("adapter.stream.cancelled",
+                        execution_id=str(task.execution_id))
+        except httpx.TimeoutException:
+            error_code = AdapterErrorCode.TIMEOUT
+            error_message = "模型服务响应超时"
+            logger.warning("adapter.stream.timeout",
+                           execution_id=str(task.execution_id))
+        except httpx.HTTPError as exc:
+            error_code = AdapterErrorCode.UNAVAILABLE
+            error_message = "模型服务网络错误"
+            logger.warning("adapter.stream.network_error",
+                           execution_id=str(task.execution_id),
+                           error=str(exc))
+        except Exception:
+            error_code = AdapterErrorCode.INTERNAL_ERROR
+            error_message = "适配器内部错误"
+            logger.exception("adapter.stream.internal_error",
+                             execution_id=str(task.execution_id))
 
-        if error_code is not None and final_status != "cancelled":
+        try:
+            self._active_response = None
+        except Exception:
+            pass
+
+        if error_code is not None:
+            final_status = "cancelled" if error_code == AdapterErrorCode.CANCELLED else "failed"
             yield ExecutionErrorEvent(
                 execution_id=task.execution_id,
                 sequence=sequence,
                 error_code=error_code,
-                error_message=error_message or "模型执行失败",
-                recoverable=error_code in {AdapterErrorCode.TIMEOUT, AdapterErrorCode.UNAVAILABLE},
+                error_message=error_message or "",
+                recoverable=False,
             )
             sequence += 1
+
+        elapsed = time.perf_counter() - perf_start
+        adapter_calls_total.labels(
+            adapter="openai_compatible", status=final_status
+        ).inc()
+        adapter_execution_duration_seconds.labels(adapter="openai_compatible").observe(elapsed)
+
+        logger.info("adapter.stream.complete",
+                     execution_id=str(task.execution_id),
+                     status=final_status,
+                     duration_ms=int(elapsed * 1000),
+                     received_content=received_content)
 
         yield ExecutionStatusEvent(
             execution_id=task.execution_id,
             sequence=sequence,
             status=final_status,
-            message=error_message,
+            message=None if final_status == "succeeded" else final_status,
         )
-
-        duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+        sequence += 1
         self._last_result = AgentResult(
             execution_id=task.execution_id,
             status=final_status,
-            duration_ms=duration_ms,
+            artifacts=[],
+            total_tokens=None,
+            duration_ms=int(elapsed * 1000),
             error_code=error_code,
             error_message=error_message,
         )
 
-    def _build_rag_context_msg(self, context: dict) -> str | None:
-        parts = []
-        summary = context.get("summary_context")
-        if summary:
-            parts.append("[会话摘要]\n" + summary)
-        prefs = context.get("preference_context")
-        if prefs and isinstance(prefs, list):
-            pref_lines = ["[用户偏好]"]
-            for p in prefs:
-                pref_lines.append("- {}: {}".format(p.get('key', ''), p.get('value', '')))
-            parts.append("\n".join(pref_lines))
+    def _build_rag_context_msg(self, context: dict[str, object]) -> str | None:
+        """从任务上下文中提取 RAG 信息组装为 System 提示。
+
+        不包含凭据或隐私路径——只序列化 user_preferences、conversation_summaries
+        和 knowledge_context 的数量摘要。
+        """
+        parts: list[str] = []
+        user_prefs = context.get("user_preferences")
+        if isinstance(user_prefs, dict):
+            for k, v in user_prefs.items():
+                parts.append(f"用户偏好 {k} = {v}")
+        summaries = context.get("conversation_summaries")
+        if isinstance(summaries, list) and summaries:
+            parts.append("[历史对话摘要]")
+            for s in summaries:
+                if isinstance(s, str):
+                    parts.append("- " + s)
+                elif isinstance(s, dict) and "content" in s:
+                    parts.append("- " + str(s["content"]))
         kb = context.get("knowledge_context")
-        if kb and isinstance(kb, list):
-            parts.append("[知识库检索] 已从项目知识库检索到{}条相关资料（附加在用户消息中）".format(len(kb)))
+        if isinstance(kb, list) and kb:
+            parts.append(f"[项目知识库检索] 已从项目知识库检索到{len(kb)}条相关资料（附加在用户消息中）")
         if not parts:
             return None
         result = "\n\n".join(parts)
-        logger.info("[RAG-ADAPTER] context built: %d chars, keys=%s", len(result), list(context.keys()))
         return result
 
     def _messages(self, task: AgentTask) -> list[dict[str, str]]:
@@ -225,7 +268,6 @@ class OpenAICompatibleAdapter:
         if self._system_prompt is not None:
             base.append({"role": "system", "content": self._system_prompt})
         # 注入 RAG 上下文（会话摘要 + 用户偏好 + 知识库提示）
-        logger.info("[RAG-ADAPTER] _messages: context keys=%s", list(task.context.keys()))
         rag_msg = self._build_rag_context_msg(task.context)
         if rag_msg:
             base.append({"role": "system", "content": rag_msg})
@@ -249,7 +291,6 @@ class OpenAICompatibleAdapter:
                 for i in range(len(msgs) - 1, -1, -1):
                     if msgs[i]["role"] == "user":
                         msgs[i]["content"] = kb_text + "\n\n[用户问题]\n" + msgs[i]["content"]
-                        logger.info("[RAG-ADAPTER] Injected KB into history user message at index %d (%d chars)", i, len(kb_text))
                         break
             return msgs
         # 无历史消息时，将知识库内容注入用户消息
@@ -260,7 +301,6 @@ class OpenAICompatibleAdapter:
                 kb_text += "--- {} ---\n{}\n".format(kb_item.get('file', ''), kb_item.get('content', ''))
             kb_text += "\n请基于以上知识库内容回答用户问题。如果知识库中没有相关信息，可以基于你自己的知识回答。"
             user_content = kb_text + "\n\n[用户问题]\n" + task.message_content
-            logger.info("[RAG-ADAPTER] Injected KB into user message (%d chars)", len(kb_text))
             return [*base, {"role": "user", "content": user_content}]
         return [*base, {"role": "user", "content": task.message_content}]
 
@@ -289,3 +329,5 @@ class OpenAICompatibleAdapter:
         if 400 <= status_code < 500:
             return AdapterErrorCode.CONFIG_ERROR, "模型请求配置无效"
         return AdapterErrorCode.UNAVAILABLE, "模型服务暂时不可用"
+
+

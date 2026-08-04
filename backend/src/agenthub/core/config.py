@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     preview_port_range_start: int = 18000
     preview_port_range_end: int = 18999
 
+    # Phase 11: 速率、并发与大小限制
+    rate_limit_enabled: bool = True
+    rate_limit_global_rps: float = 100.0
+    rate_limit_ip_rps: float = 20.0
+    ws_max_connections_per_conversation: int = 10
+    max_request_size_bytes: int = 10 * 1024 * 1024  # 10 MB
+
     def runtime_dependencies(self) -> RuntimeDependencies:
         """校验后续阶段连接数据库和 Orchestrator 所需的配置。
         错误消息只列出环境变量名称，调用方可以安全记录该消息；任何已提供的密钥值
